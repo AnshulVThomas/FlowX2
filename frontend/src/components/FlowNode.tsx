@@ -1,4 +1,4 @@
-// Commit for 2025-07-04: FlowNode.tsx edit for historical commit
+// updated file
 import type { CSSProperties } from 'react'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
