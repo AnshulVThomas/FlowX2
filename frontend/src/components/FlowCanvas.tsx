@@ -1,4 +1,4 @@
-// Commit for 2025-07-05: FlowCanvas.tsx edit for historical commit
+// updated file
 import { useCallback, useMemo, useRef } from 'react'
 import ReactFlow, { addEdge, Background, Controls, MiniMap, useEdgesState, useNodesState } from 'reactflow'
 import type { Connection, Edge, Node, OnConnect, ReactFlowInstance } from 'reactflow'
