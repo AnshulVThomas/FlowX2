@@ -1,15 +1,19 @@
 import { create } from 'zustand'
 import type { Node } from 'reactflow'
 
-
+// Define the shape of our Agent data
+export interface AgentData {
+  label: string
+  apiKey?: string
+  tools: string[]
+}
 
 interface NodeStoreState {
   nodes: Node[]
   setNodes: (nodes: Node[]) => void
-  addNode: (node: Node) => void
-  removeNode: (id: string) => void
+  // Helper to update specific properties inside a node's data
+  updateNodeData: (id: string, newData: Partial<AgentData>) => void
   loadNodes: () => void
-  saveNodes: () => void
 }
 
 const STORAGE_KEY = 'flowx2-nodes'
@@ -17,21 +21,19 @@ const STORAGE_KEY = 'flowx2-nodes'
 export const useNodeStore = create<NodeStoreState>((set, get) => ({
   nodes: [],
   setNodes: (nodes) => {
-    const currentNodes = get().nodes;
-    if (JSON.stringify(currentNodes) !== JSON.stringify(nodes)) {
-      set({ nodes });
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(nodes));
-    }
-  },
-  addNode: (node) => {
-    const nodes = [...get().nodes, node]
     set({ nodes })
     localStorage.setItem(STORAGE_KEY, JSON.stringify(nodes))
   },
-  removeNode: (id) => {
-    const nodes = get().nodes.filter((n) => n.id !== id)
-    set({ nodes })
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nodes))
+  updateNodeData: (id, newData) => {
+    set((state) => ({
+      nodes: state.nodes.map((node) => 
+        node.id === id 
+          ? { ...node, data: { ...node.data, ...newData } } 
+          : node
+      )
+    }))
+    // Save to storage after update
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(get().nodes))
   },
   loadNodes: () => {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -42,8 +44,5 @@ export const useNodeStore = create<NodeStoreState>((set, get) => ({
         set({ nodes: [] })
       }
     }
-  },
-  saveNodes: () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(get().nodes))
   },
 }))

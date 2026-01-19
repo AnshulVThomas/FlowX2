@@ -19,11 +19,12 @@ import type {
 import { useNodeStore } from '../StateManagement/nodeStore'
 import { useEdgeStore } from '../StateManagement/edgeStore'
 import { HorizontalNode } from './FlowNode'
+import { AgentNode } from './AgentNode'
 import { exportFlowState } from '../StateManagement/exportState'
 
 import 'reactflow/dist/style.css'
 
-type DragNodeType = 'default'
+type DragNodeType = 'default' | 'agent' | 'monitor' | 'command' | 'tool' | 'webhook' | 'database';
 type PaletteItem = {
   label: string
   type: DragNodeType
@@ -33,7 +34,7 @@ const PALETTE: Array<{ group: string; items: PaletteItem[] }> = [
   {
     group: 'Core',
     items: [
-      { label: 'Agent', type: 'default' },
+      { label: 'Agent', type: 'agent' },
       { label: 'Monitor', type: 'default' },
       { label: 'Command', type: 'default' },
       { label: 'Tool', type: 'default' },
@@ -54,7 +55,7 @@ export default function FlowCanvas() {
   const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null)
 
   // Zustand Store State & Actions
-  const { nodes: storeNodes, setNodes: setStoreNodes, loadNodes } = useNodeStore()
+  const { nodes: storeNodes, setNodes: setStoreNodes, loadNodes, updateNodeData } = useNodeStore()
   const { edges: storeEdges, setEdges: setStoreEdges, loadEdges } = useEdgeStore()
 
   // Local Selection State
@@ -120,30 +121,32 @@ export default function FlowCanvas() {
     evt.dataTransfer.dropEffect = 'move'
   }, [])
 
-  const onDrop = useCallback(
-    (evt: React.DragEvent) => {
-      evt.preventDefault()
-      const type = evt.dataTransfer.getData('application/reactflow') as DragNodeType
-      const label = evt.dataTransfer.getData('application/reactflow-label') || `${type} node`
+  const onDrop = useCallback((evt: React.DragEvent) => {
+    evt.preventDefault();
+    const type = evt.dataTransfer.getData('application/reactflow') as DragNodeType;
+    const label = evt.dataTransfer.getData('application/reactflow-label') || `${type} node`;
 
-      if (!type || !reactFlowInstanceRef.current) return
+    if (!type || !reactFlowInstanceRef.current) return;
 
-      const position = reactFlowInstanceRef.current.screenToFlowPosition({
-        x: evt.clientX,
-        y: evt.clientY,
-      })
+    const position = reactFlowInstanceRef.current.screenToFlowPosition({
+      x: evt.clientX,
+      y: evt.clientY,
+    });
 
-      const newNode: Node = {
-        id: getId(),
-        type,
-        position,
-        data: { label },
-      }
+    // CRITICAL: Initialize data structure based on type
+    const newNode: Node = {
+      id: getId(),
+      type,
+      position,
+      data: type === 'agent' 
+        ? { label, apiKey: '', tools: [] } // Default for Agent
+        : { label } // Default for others
+    };
 
-      setNodes((nds) => nds.concat(newNode))
-    },
-    [setNodes]
-  )
+    setNodes((nds) => nds.concat(newNode));
+  }, [setNodes]);
+
+ 
 
   // Keyboard Shortcuts (Delete/Backspace)
   useEffect(() => {
@@ -161,7 +164,10 @@ export default function FlowCanvas() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedNodes, selectedEdges, setNodes, setEdges])
 
-  const nodeTypes = useMemo(() => ({ default: HorizontalNode }), [])
+  const nodeTypes = useMemo(() => ({
+    agent: (props: any) => <AgentNode {...props} updateNodeData={updateNodeData} />,
+    default: HorizontalNode,
+  }), [updateNodeData]);
   const defaultViewport = useMemo(() => ({ x: 0, y: 0, zoom: 1 }), [])
 
   return (

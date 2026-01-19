@@ -101,3 +101,23 @@ body,
 .react-flow__node.selected {
   box-shadow: none !important;
 }
+
+/* Custom: Make selected edge visually pop (like selected node) */
+.react-flow__edge.selected path,
+.react-flow__edge-path.selected {
+  stroke: #3b82f6 !important; /* blue-500 */
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 6px #3b82f6aa);
+}
+
+/* Optional: Make non-selected edges slightly faded for contrast */
+.react-flow__edge path,
+.react-flow__edge-path {
+  transition: stroke 0.15s, stroke-width 0.15s, filter 0.15s;
+}
+.react-flow__edge:not(.selected) path,
+.react-flow__edge-path:not(.selected) {
+  stroke: #64748b !important; /* slate-400 */
+  stroke-width: 2px !important;
+  filter: none;
+}
