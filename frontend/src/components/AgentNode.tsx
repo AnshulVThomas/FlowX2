@@ -1,88 +1,54 @@
-import { useCallback, useState } from 'react';
 import { Handle, Position } from 'reactflow';
-import type { AgentData } from '../StateManagement/nodeStore';
 
+import './styles/AgentNode.css'; 
 interface AgentNodeProps {
-  data: AgentData;
   id: string;
-  updateNodeData?: (id: string, data: Partial<AgentData>) => void;
+  data: { label: string };
+  // Ensure this prop exists in your interface
+  onSpawnSettings: (id: string, type: 'api' | 'tool') => void;
 }
 
-export function AgentNode({ data, id, updateNodeData }: AgentNodeProps) {
-  const [showApiKey, setShowApiKey] = useState(false);
-
-  const onApiKeyChange = useCallback((evt: React.ChangeEvent<HTMLInputElement>) => {
-    updateNodeData?.(id, { apiKey: evt.target.value });
-  }, [id, updateNodeData]);
-
-  const onLabelChange = useCallback((evt: React.ChangeEvent<HTMLInputElement>) => {
-    updateNodeData?.(id, { label: evt.target.value });
-  }, [id, updateNodeData]);
-
-  const availableTools = ['Search Tool', 'Calculator', 'Database Reader'];
-
-  const onAddTool = useCallback((evt: React.ChangeEvent<HTMLSelectElement>) => {
-    const tool = evt.target.value;
-    // Safety check for tools array
-    const currentTools = data.tools || [];
-    if (tool && !currentTools.includes(tool)) {
-      updateNodeData?.(id, { tools: [...currentTools, tool] });
-    }
-  }, [id, updateNodeData, data.tools]);
-
-  const onRemoveTool = useCallback((tool: string) => {
-    const currentTools = data.tools || [];
-    updateNodeData?.(id, { tools: currentTools.filter(t => t !== tool) });
-  }, [id, updateNodeData, data.tools]);
-
+export function AgentNode({ id, data, onSpawnSettings }: AgentNodeProps) {
   return (
-    <div className="agent-node-custom" style={{ minWidth: 200, background: '#101828', borderRadius: 12, padding: 12, border: '1px solid #3b82f6', color: '#e2e8f0' }}>
-      <Handle type="target" position={Position.Left} />
-      
-      <div style={{ fontWeight: 700, marginBottom: 8 }}>
-        Agent: 
-        <input 
-          className="nodrag" 
-          type="text" 
-          value={data.label || ''} 
-          onChange={onLabelChange} 
-          style={{ background: 'transparent', color: '#e2e8f0', border: 'none', borderBottom: '1px solid #3b82f6', marginLeft: 5, width: '100px' }} 
-        />
+    <div className="agent-custom-node">
+      {/* 1. Standard Flow Handles (Left/Right Circles) */}
+      <Handle type="target" position={Position.Left} className="standard-handle" />
+      <Handle type="source" position={Position.Right} className="standard-handle" />
+
+      {/* 2. Top Trigger (Diamond - API) */}
+      <div 
+        className="trigger-wrapper top" 
+        onClick={(e) => {
+          e.stopPropagation();
+          onSpawnSettings(id, 'api');
+        }}
+        title="Configure API"
+      >
+        {/* We use specific classes for the shape */}
+        <div className="trigger-shape diamond"></div>
+        {/* Hidden functional handle */}
+        <Handle type="source" position={Position.Top} id="api-handle" style={{ opacity: 0 }} />
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <label style={{ fontSize: 11, color: '#a0aec0' }}>API KEY</label>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <input
-            type={showApiKey ? 'text' : 'password'}
-            value={data.apiKey || ''}
-            onChange={onApiKeyChange}
-            className="nodrag"
-            style={{ background: '#1a2233', color: '#fff', border: '1px solid #3b82f6', borderRadius: 4, flex: 1, padding: '2px 4px' }}
-          />
-          <button onClick={() => setShowApiKey(!showApiKey)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-            {showApiKey ? '🙈' : '👁️'}
-          </button>
-        </div>
-
-        <label style={{ fontSize: 11, color: '#a0aec0' }}>TOOLS</label>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {(data.tools || []).map(tool => (
-            <span key={tool} style={{ background: '#3b82f6', fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>
-              {tool} <span onClick={() => onRemoveTool(tool)} style={{ cursor: 'pointer', marginLeft: 4 }}>×</span>
-            </span>
-          ))}
-        </div>
-        
-        <select className="nodrag" onChange={onAddTool} value="" style={{ background: '#1a2233', color: '#fff', border: '1px solid #3b82f6', borderRadius: 4 }}>
-          <option value="">+ Add Tool</option>
-          {availableTools.filter(t => !(data.tools || []).includes(t)).map(t => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
+      <div className="agent-node-content">
+       
+        <div style={{ fontWeight: 'bold' }}>{data.label}</div>
       </div>
 
-      <Handle type="source" position={Position.Right} />
+      {/* 3. Bottom Trigger (Box - Tools) */}
+      <div 
+        className="trigger-wrapper bottom" 
+        onClick={(e) => {
+          e.stopPropagation();
+          onSpawnSettings(id, 'tool');
+        }}
+        title="Add Tool"
+      >
+        {/* Changed class to 'box' */}
+        <div className="trigger-shape box"></div>
+        {/* Hidden functional handle */}
+        <Handle type="source" position={Position.Bottom} id="tool-handle" style={{ opacity: 0 }} />
+      </div>
     </div>
   );
 }

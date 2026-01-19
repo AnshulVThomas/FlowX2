@@ -20,11 +20,22 @@ import { useNodeStore } from '../StateManagement/nodeStore'
 import { useEdgeStore } from '../StateManagement/edgeStore'
 import { HorizontalNode } from './FlowNode'
 import { AgentNode } from './AgentNode'
+import { ApiConfigNode } from './ApiConfigNode'
+import { ToolCircleNode } from './ToolCircleNode'
 import { exportFlowState } from '../StateManagement/exportState'
 
 import 'reactflow/dist/style.css'
 
-type DragNodeType = 'default' | 'agent' | 'monitor' | 'command' | 'tool' | 'webhook' | 'database';
+type DragNodeType = 
+  | 'default' 
+  | 'agent' 
+  | 'monitor' 
+  | 'command' 
+  | 'tool' 
+  | 'webhook' 
+  | 'database' 
+  | 'apiConfig' 
+  | 'toolCircle';
 type PaletteItem = {
   label: string
   type: DragNodeType
@@ -37,9 +48,20 @@ const PALETTE: Array<{ group: string; items: PaletteItem[] }> = [
       { label: 'Agent', type: 'agent' },
       { label: 'Monitor', type: 'default' },
       { label: 'Command', type: 'default' },
-      { label: 'Tool', type: 'default' },
       { label: 'Webhook', type: 'default' },
       { label: 'Database', type: 'default' },
+    ],
+  },
+  {
+    group: 'API',
+    items: [
+      { label: 'API Config Node', type: 'apiConfig' },
+    ],
+  },
+  {
+    group: 'Tools',
+    items: [
+      { label: 'Tool Node', type: 'toolCircle' },
     ],
   },
 ]
@@ -121,32 +143,101 @@ export default function FlowCanvas() {
     evt.dataTransfer.dropEffect = 'move'
   }, [])
 
-  const onDrop = useCallback((evt: React.DragEvent) => {
-    evt.preventDefault();
-    const type = evt.dataTransfer.getData('application/reactflow') as DragNodeType;
-    const label = evt.dataTransfer.getData('application/reactflow-label') || `${type} node`;
 
-    if (!type || !reactFlowInstanceRef.current) return;
+  // Callback to spawn settings nodes (API or Tool)
+ const onSpawnSettings = useCallback((agentId: string, type: 'api' | 'tool') => {
+    // We use the functional update pattern to get the latest nodes/edges
+    setNodes((nds) => {
+      const agentNode = nds.find(n => n.id === agentId);
+      if (!agentNode) return nds;
 
-    const position = reactFlowInstanceRef.current.screenToFlowPosition({
-      x: evt.clientX,
-      y: evt.clientY,
+      const newId = `${type}-${Date.now()}`;
+      
+      // Prevent multiple API nodes if one already exists
+      if (type === 'api' && nds.some(n => n.id.startsWith('api-') && n.id.includes(agentId))) {
+         return nds;
+      }
+
+      const newNode: Node = {
+        id: newId,
+        type: type === 'api' ? 'apiConfig' : 'toolCircle',
+        position: {
+          x: agentNode.position.x + (type === 'api' ? -20 : 40),
+          y: agentNode.position.y + (type === 'api' ? -150 : 150),
+        },
+        data: { label: type === 'api' ? 'API Config' : 'New Tool' }
+      };
+
+      setEdges((eds) => eds.concat({
+        id: `edge-${newId}`,
+        source: agentId,
+        target: newId,
+        sourceHandle: type === 'api' ? 'api-handle' : 'tool-handle',
+        animated: true,
+      }));
+
+      return nds.concat(newNode);
     });
+  }, [setNodes, setEdges]);
 
-    // CRITICAL: Initialize data structure based on type
-    const newNode: Node = {
-      id: getId(),
-      type,
-      position,
-      data: type === 'agent' 
-        ? { label, apiKey: '', tools: [] } // Default for Agent
-        : { label } // Default for others
-    };
+  const onDrop = useCallback((evt: React.DragEvent) => {
+  evt.preventDefault();
+  const type = evt.dataTransfer.getData('application/reactflow') as DragNodeType;
+  const label = evt.dataTransfer.getData('application/reactflow-label') || `${type} node`;
 
-    setNodes((nds) => nds.concat(newNode));
-  }, [setNodes]);
+  if (!type || !reactFlowInstanceRef.current) return;
 
- 
+  const position = reactFlowInstanceRef.current.screenToFlowPosition({
+    x: evt.clientX,
+    y: evt.clientY,
+  });
+
+  const newNode: Node = {
+    id: getId(),
+    type,
+    position,
+    // ✅ CLEAN: No functions here. Only JSON-serializable data.
+    data: type === 'agent' 
+      ? { label, apiKey: '', tools: [] } 
+      : { label }
+  };
+
+  setNodes((nds) => nds.concat(newNode));
+}, [setNodes]); // reactFlowInstanceRef is a ref, so it doesn't need to be a dependency
+
+
+const isValidConnection = useCallback((connection: Connection) => {
+  const sourceNode = nodes.find((n) => n.id === connection.source);
+  const targetNode = nodes.find((n) => n.id === connection.target);
+
+  // 1. RULE: Only apiConfig nodes can hit the 'api-handle' (Top Diamond)
+  if (connection.targetHandle === 'api-handle') {
+    return sourceNode?.type === 'apiConfig';
+  }
+
+  // 2. RULE: Only toolCircle nodes can hit the 'tool-handle' (Bottom Box)
+  if (connection.targetHandle === 'tool-handle') {
+    return sourceNode?.type === 'toolCircle';
+  }
+
+  // 3. RULE: Standard side handles (usually undefined or 'left'/'right') 
+  // should REJECT apiConfig and toolCircle nodes.
+  const isSpecialNode = sourceNode?.type === 'apiConfig' || sourceNode?.type === 'toolCircle';
+  
+  // If the target handle is NOT one of the special ones, but the source IS a special node, block it.
+  if (isSpecialNode && connection.targetHandle !== 'api-handle' && connection.targetHandle !== 'tool-handle') {
+    return false;
+  }
+
+  // 4. RULE: Prevent standard nodes from plugging into the special handles
+  if (!isSpecialNode && (connection.targetHandle === 'api-handle' || connection.targetHandle === 'tool-handle')) {
+    return false;
+  }
+
+  // Default: Allow standard left-to-right connections between normal nodes
+  return true;
+}, [nodes]);
+
 
   // Keyboard Shortcuts (Delete/Backspace)
   useEffect(() => {
@@ -164,10 +255,24 @@ export default function FlowCanvas() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedNodes, selectedEdges, setNodes, setEdges])
 
-  const nodeTypes = useMemo(() => ({
-    agent: (props: any) => <AgentNode {...props} updateNodeData={updateNodeData} />,
-    default: HorizontalNode,
-  }), [updateNodeData]);
+const nodeTypes = useMemo(() => ({
+  // ✅ CORRECT: Injecting callbacks as props
+  agent: (props: any) => (
+    <AgentNode 
+      {...props} 
+      updateNodeData={updateNodeData} 
+      onSpawnSettings={onSpawnSettings} 
+    />
+  ),
+  apiConfig: ApiConfigNode,
+  toolCircle: ToolCircleNode,
+  default: HorizontalNode,
+}), [updateNodeData, onSpawnSettings]);
+ 
+
+
+
+
   const defaultViewport = useMemo(() => ({ x: 0, y: 0, zoom: 1 }), [])
 
   return (
@@ -213,6 +318,7 @@ export default function FlowCanvas() {
           onInit={(instance) => { reactFlowInstanceRef.current = instance }}
           nodeTypes={nodeTypes}
           onSelectionChange={onSelectionChange}
+          isValidConnection={isValidConnection} 
           defaultViewport={defaultViewport}
         >
           <MiniMap />
