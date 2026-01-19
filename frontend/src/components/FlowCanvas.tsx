@@ -4,9 +4,9 @@ import ReactFlow, { addEdge, Background, Controls, MiniMap, useEdgesState, useNo
 import type { Connection, Edge, Node, OnConnect, ReactFlowInstance } from 'reactflow'
 
 import 'reactflow/dist/style.css'
-import { HorizontalInputNode, HorizontalNode, HorizontalOutputNode } from './FlowNode'
+import { HorizontalNode } from './FlowNode'
 
-type DragNodeType = 'default' | 'input' | 'output'
+type DragNodeType = 'default'
 type PaletteItem = {
   label: string
   type: DragNodeType
@@ -20,13 +20,6 @@ const PALETTE: Array<{ group: string; items: PaletteItem[] }> = [
       { label: 'Monitor', type: 'default' },
       { label: 'Command', type: 'default' },
       { label: 'Tool', type: 'default' },
-    ],
-  },
-  {
-    group: 'I/O',
-    items: [
-      { label: 'Input', type: 'input' },
-      { label: 'Output', type: 'output' },
       { label: 'Webhook', type: 'default' },
       { label: 'Database', type: 'default' },
     ],
@@ -57,8 +50,6 @@ export default function FlowCanvas() {
   const nodeTypes = useMemo(
     () => ({
       default: HorizontalNode,
-      input: HorizontalInputNode,
-      output: HorizontalOutputNode,
     }),
     [],
   )

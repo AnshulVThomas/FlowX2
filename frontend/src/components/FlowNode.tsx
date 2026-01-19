@@ -21,6 +21,7 @@ function baseStyle(selected: boolean): CSSProperties {
     color: 'rgba(226,232,240,0.95)',
     minWidth: 140,
     boxShadow: selected ? '0 0 0 3px rgba(59,130,246,0.25)' : undefined,
+    position: 'relative',
   }
 }
 
@@ -36,25 +37,4 @@ export function HorizontalNode({ data, selected }: NodeProps<FlowNodeData>) {
   )
 }
 
-export function HorizontalInputNode({ data, selected }: NodeProps<FlowNodeData>) {
-  return (
-    <div style={wrapperStyle}>
-      <div style={baseStyle(!!selected)}>
-        <div style={{ fontSize: 12, fontWeight: 600 }}>{data?.label ?? 'Input'}</div>
-        <Handle type="source" position={Position.Right} />
-      </div>
-    </div>
-  )
-}
-
-export function HorizontalOutputNode({ data, selected }: NodeProps<FlowNodeData>) {
-  return (
-    <div style={wrapperStyle}>
-      <div style={baseStyle(!!selected)}>
-        <Handle type="target" position={Position.Left} />
-        <div style={{ fontSize: 12, fontWeight: 600 }}>{data?.label ?? 'Output'}</div>
-      </div>
-    </div>
-  )
-}
 
