@@ -53,6 +53,10 @@ export default function FlowCanvas() {
   const reactFlowWrapper = useRef<HTMLDivElement | null>(null)
   const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null)
 
+  // Zustand Store State & Actions
+  const { nodes: storeNodes, setNodes: setStoreNodes, loadNodes } = useNodeStore()
+  const { edges: storeEdges, setEdges: setStoreEdges, loadEdges } = useEdgeStore()
+
   // Local Selection State
   const [selectedNodes, setSelectedNodes] = useState<string[]>([])
   const [selectedEdges, setSelectedEdges] = useState<string[]>([])
@@ -61,35 +65,36 @@ export default function FlowCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
-  // Zustand Store Actions
-  const { setNodes: setStoreNodes, loadNodes } = useNodeStore()
-  const { setEdges: setStoreEdges, loadEdges } = useEdgeStore()
-
-  // 1. INITIAL LOAD: Load data from stores on mount
+  // 1. On Mount, hydrate Zustand stores from storage
   useEffect(() => {
     loadNodes()
     loadEdges()
-    
-    // We pull from localStorage here to hydrate the local ReactFlow state
-    const savedNodes = localStorage.getItem('flowx2-nodes')
-    const savedEdges = localStorage.getItem('flowx2-edges')
-    
-    if (savedNodes) {
-      try { setNodes(JSON.parse(savedNodes)) } catch (e) { console.error(e) }
-    }
-    if (savedEdges) {
-      try { setEdges(JSON.parse(savedEdges)) } catch (e) { console.error(e) }
-    }
-  }, [loadNodes, loadEdges, setNodes, setEdges])
+  }, [loadNodes, loadEdges])
 
-  // 2. AUTO-SYNC: Sync store whenever local nodes/edges change (captures movement, connects, and deletes)
+  // 2. When Zustand store is hydrated, push to React Flow state (only if local state is empty)
   useEffect(() => {
-    // We cast to Node[] to resolve the 'string | undefined' type mismatch
-    setStoreNodes(nodes as Node[])
+    if (storeNodes.length > 0 && nodes.length === 0) {
+      setNodes(storeNodes)
+    }
+  }, [storeNodes, setNodes])
+
+  useEffect(() => {
+    if (storeEdges.length > 0 && edges.length === 0) {
+      setEdges(storeEdges)
+    }
+  }, [storeEdges, setEdges])
+
+  // 3. Sync local changes back to Zustand store (avoids infinite loop by checking content)
+  useEffect(() => {
+    if (nodes.length > 0) {
+      setStoreNodes(nodes as Node[])
+    }
   }, [nodes, setStoreNodes])
 
   useEffect(() => {
-    setStoreEdges(edges)
+    if (edges.length > 0) {
+      setStoreEdges(edges)
+    }
   }, [edges, setStoreEdges])
 
   // Handlers

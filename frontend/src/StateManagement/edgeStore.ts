@@ -15,8 +15,11 @@ const STORAGE_KEY = 'flowx2-edges'
 export const useEdgeStore = create<EdgeStoreState>((set, get) => ({
   edges: [],
   setEdges: (edges) => {
-    set({ edges })
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(edges))
+    const currentEdges = get().edges;
+    if (JSON.stringify(currentEdges) !== JSON.stringify(edges)) {
+      set({ edges });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(edges));
+    }
   },
   addEdge: (edge) => {
     const edges = [...get().edges, edge]

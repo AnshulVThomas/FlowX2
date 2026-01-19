@@ -84,3 +84,20 @@ body,
   box-shadow: none;
   padding: 0;
 }
+
+/* Add this to your CSS file */
+
+/* 1. Remove the default background, border, and shadows from ALL nodes */
+.react-flow__node {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  width: auto !important; /* Allows the node to size itself based on your content */
+}
+
+/* 2. Optional: If you want to remove the default selection blue border 
+      to use your own custom 'selected' logic */
+.react-flow__node.selected {
+  box-shadow: none !important;
+}

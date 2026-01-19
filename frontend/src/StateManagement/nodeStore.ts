@@ -17,8 +17,11 @@ const STORAGE_KEY = 'flowx2-nodes'
 export const useNodeStore = create<NodeStoreState>((set, get) => ({
   nodes: [],
   setNodes: (nodes) => {
-    set({ nodes })
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nodes))
+    const currentNodes = get().nodes;
+    if (JSON.stringify(currentNodes) !== JSON.stringify(nodes)) {
+      set({ nodes });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(nodes));
+    }
   },
   addNode: (node) => {
     const nodes = [...get().nodes, node]
