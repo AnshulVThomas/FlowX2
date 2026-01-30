@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from database.connection import db
 from models.workflow import Workflow, WorkflowSummary
@@ -22,6 +23,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global error handlers
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    # Log the error for debugging
+    print(f"Unhandled error: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "error": str(exc)}
+    )
+
+# Catch MongoDB connection errors specifically
+try:
+    from pymongo.errors import PyMongoError
+    
+    @app.exception_handler(PyMongoError)
+    async def mongodb_exception_handler(request: Request, exc: PyMongoError):
+        print(f"MongoDB error: {exc}")
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Database connection error", "error": str(exc)}
+        )
+except ImportError:
+    pass  # PyMongo not installed or not using MongoDB
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

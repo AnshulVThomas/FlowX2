@@ -11,12 +11,12 @@ import {
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
 import type { Workflow, WorkflowSummary } from '../types';
-import { fetchWorkflowDetails, deleteWorkflow as apiDeleteWorkflow } from '../services/api';
+import { fetchWorkflowDetails, deleteWorkflow as apiDeleteWorkflow, saveWorkflow } from '../services/api';
 
 interface WorkflowState {
     workflows: Workflow[];
     activeId: string | null;
-    createWorkflow: () => void;
+    createWorkflow: () => Promise<void>;
     setActiveWorkflow: (id: string) => void;
     onNodesChange: (changes: NodeChange[]) => void;
     onEdgesChange: (changes: EdgeChange[]) => void;
@@ -25,6 +25,8 @@ interface WorkflowState {
     updateWorkflowName: (id: string, name: string) => void;
     addNode: (node: Node) => void;
     setWorkflows: (workflows: Workflow[]) => void;
+    markClean: (id: string) => void;
+    isWorkflowDirty: (id: string) => boolean;
 }
 
 
@@ -41,18 +43,26 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     ],
     activeId: initialWorkflowId,
 
-    createWorkflow: () => {
+    createWorkflow: async () => {
         const newId = uuidv4();
         const newWorkflow: Workflow = {
             id: newId,
-            name: `Workflow ${get().workflows.length + 1} `,
+            name: `Workflow ${get().workflows.length + 1}`,
             nodes: [],
             edges: [],
+            isDirty: false,
         };
         set((state) => ({
             workflows: [...state.workflows, newWorkflow],
             activeId: newId,
         }));
+
+        // Auto-save to database
+        try {
+            await saveWorkflow(newWorkflow);
+        } catch (error) {
+            console.error('Failed to auto-save new workflow', error);
+        }
     },
 
     setActiveWorkflow: async (id) => {
@@ -99,7 +109,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
     updateWorkflowName: (id, name) => {
         set((state) => ({
-            workflows: state.workflows.map(w => w.id === id ? { ...w, name } : w)
+            workflows: state.workflows.map(w => w.id === id ? { ...w, name, isDirty: true } : w)
         }));
     },
 
@@ -114,6 +124,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
                         return {
                             ...w,
                             nodes: applyNodeChanges(changes, w.nodes),
+                            isDirty: true,
                         };
                     }
                     return w;
@@ -133,6 +144,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
                         return {
                             ...w,
                             edges: applyEdgeChanges(changes, w.edges),
+                            isDirty: true,
                         };
                     }
                     return w;
@@ -152,6 +164,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
                         return {
                             ...w,
                             edges: addEdge(connection, w.edges),
+                            isDirty: true,
                         };
                     }
                     return w;
@@ -180,6 +193,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
                         return {
                             ...w,
                             nodes: [...w.nodes, node],
+                            isDirty: true,
                         };
                     }
                     return w;
@@ -215,6 +229,17 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         if (mappedWorkflows.length > 0) {
             get().setActiveWorkflow(mappedWorkflows[0].id);
         }
+    },
+
+    markClean: (id) => {
+        set((state) => ({
+            workflows: state.workflows.map(w => w.id === id ? { ...w, isDirty: false } : w)
+        }));
+    },
+
+    isWorkflowDirty: (id) => {
+        const workflow = get().workflows.find(w => w.id === id);
+        return workflow?.isDirty ?? false;
     },
 }));
 

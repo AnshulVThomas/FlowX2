@@ -6,6 +6,7 @@ export interface Workflow {
     nodes: Node[];
     edges: Edge[];
     detailsLoaded?: boolean;
+    isDirty?: boolean;
 }
 
 export interface WorkflowSummary {
