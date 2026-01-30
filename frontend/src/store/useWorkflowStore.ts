@@ -28,7 +28,9 @@ interface WorkflowState {
     onConnect: (connection: Connection) => void;
     deleteWorkflow: (id: string) => void;
     updateWorkflowName: (id: string, name: string) => void;
+    addNode: (node: Node) => void;
 }
+
 
 const initialWorkflowId = uuidv4();
 
@@ -37,9 +39,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         {
             id: initialWorkflowId,
             name: 'Workflow 1',
-            nodes: [
-                { id: '1', position: { x: 100, y: 100 }, data: { label: 'Start Node' } },
-            ],
+            nodes: [],
             edges: [],
         },
     ],
@@ -137,4 +137,33 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
             };
         });
     },
+
+    addNode: (node) => {
+        set((state) => {
+            const { activeId, workflows } = state;
+            if (!activeId) return state;
+
+            // Check if attempting to add startNode when one already exists
+            const activeWorkflow = workflows.find(w => w.id === activeId);
+            if (activeWorkflow && node.type === 'startNode') {
+                const hasStartNode = activeWorkflow.nodes.some(n => n.type === 'startNode');
+                if (hasStartNode) {
+                    return state; // Prevent adding another start node
+                }
+            }
+
+            return {
+                workflows: workflows.map((w) => {
+                    if (w.id === activeId) {
+                        return {
+                            ...w,
+                            nodes: [...w.nodes, node],
+                        };
+                    }
+                    return w;
+                }),
+            };
+        });
+    },
 }));
+
