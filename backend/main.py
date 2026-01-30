@@ -1,9 +1,18 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Dict, Any
+from database.connection import db
+from models.workflow import Workflow
+from contextlib import asynccontextmanager
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Connect to the database
+    db.connect()
+    yield
+    # Shutdown: Close the database connection
+    db.close()
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -13,17 +22,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class Workflow(BaseModel):
-    name: str
-    data: Dict[str, Any]
-
 @app.get("/")
 async def read_root():
     return {"message": "Hello World"}
 
 @app.post("/workflows")
 async def receive_workflow(workflow: Workflow):
-    # TODO: Process the workflow with LangGraph and store in MongoDB
-    print(f"Received workflow: {workflow.name}")
-    print(f"Workflow Data: {workflow.data}")
-    return {"status": "success", "received": workflow.name}
+    database = db.get_db()
+    result = await database.workflows.insert_one(workflow.dict())
+    return {"status": "success", "received": workflow.name, "id": str(result.inserted_id)}
