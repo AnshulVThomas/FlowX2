@@ -1,7 +1,8 @@
-import { Plus, X, Save } from 'lucide-react';
+import { Plus, X, Save, Activity } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useWorkflowStore } from '../../store/useWorkflowStore';
 import { saveWorkflow } from '../../services/api';
+import { useServerStatus } from '../../hooks/useServerStatus';
 import { toast } from 'sonner';
 
 export function Navbar() {
@@ -9,6 +10,7 @@ export function Navbar() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
+    const isConnected = useServerStatus();
 
     useEffect(() => {
         if (editingId && inputRef.current) {
@@ -50,6 +52,9 @@ export function Navbar() {
 
     return (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 p-1.5 rounded-full border border-white/20 bg-black/40 backdrop-blur-md shadow-xl">
+            <div className={`p-2 rounded-full ${isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'} transition-colors`} title={isConnected ? "Server Online" : "Server Offline"}>
+                <Activity size={18} />
+            </div>
             <div className="flex items-center gap-1 px-1">
                 {workflows.map((workflow) => (
                     <div
