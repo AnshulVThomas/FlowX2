@@ -93,6 +93,11 @@ export function Canvas() {
                 onConnect={onConnect}
                 onDrop={onDrop}
                 onDragOver={onDragOver}
+                deleteKeyCode="Delete"
+                multiSelectionKeyCode="Shift"
+                selectionOnDrag
+                panOnDrag={[1, 2]}
+                selectNodesOnDrag={false}
             >
                 <Controls />
                 <MiniMap />

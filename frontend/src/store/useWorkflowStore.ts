@@ -128,6 +128,9 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     },
 
     onNodesChange: (changes) => {
+        // Check if any changes are node removals
+        const hasRemoval = changes.some(change => change.type === 'remove');
+
         set((state) => {
             const { activeId, workflows } = state;
             if (!activeId) return state;
@@ -145,9 +148,28 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
                 }),
             };
         });
+
+        // Auto-save when node is deleted
+        if (hasRemoval) {
+            const { activeId, workflows } = get();
+            const activeWorkflow = workflows.find(w => w.id === activeId);
+            if (activeWorkflow) {
+                saveWorkflow(activeWorkflow)
+                    .then(() => {
+                        get().markClean(activeWorkflow.id);
+                        console.log('Node deleted and workflow auto-saved');
+                    })
+                    .catch((error) => {
+                        console.error('Failed to auto-save after node deletion', error);
+                    });
+            }
+        }
     },
 
     onEdgesChange: (changes) => {
+        // Check if any changes are edge removals
+        const hasRemoval = changes.some(change => change.type === 'remove');
+
         set((state) => {
             const { activeId, workflows } = state;
             if (!activeId) return state;
@@ -165,6 +187,22 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
                 }),
             };
         });
+
+        // Auto-save when edge is deleted
+        if (hasRemoval) {
+            const { activeId, workflows } = get();
+            const activeWorkflow = workflows.find(w => w.id === activeId);
+            if (activeWorkflow) {
+                saveWorkflow(activeWorkflow)
+                    .then(() => {
+                        get().markClean(activeWorkflow.id);
+                        console.log('Edge deleted and workflow auto-saved');
+                    })
+                    .catch((error) => {
+                        console.error('Failed to auto-save after edge deletion', error);
+                    });
+            }
+        }
     },
 
     onConnect: (connection) => {
