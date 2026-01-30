@@ -7,7 +7,7 @@ This document outlines the "unofficial" flow for saving workflows in the FlowX2 
 ### 1. Architecture Overview
 
 The backend is built with **FastAPI** and uses **MongoDB** for persistence.
-Key changes involved refactoring a single `main.py` into a structured application.
+Key changes involved refactoring a single `main.py` into a structured application and connecting the frontend via REST API and WebSockets.
 
 ### 2. Directory Structure
 
@@ -23,6 +23,7 @@ The backend code is organized as follows:
   - **`main.py`**: The entry point.
     - Configures lifecycle events (startup/shutdown) to handle DB connections.
     - Defines the `/workflows` POST endpoint to save data.
+    - Defines the `/ws` WebSocket endpoint for server status.
 
 ### 3. Data Flow
 
@@ -46,7 +47,13 @@ The backend code is organized as follows:
 4. **Response**:
    - Returns a success status and the new MongoDB document ID.
 
-### 4. Running the Project
+### 4. Real-time Status (WebSocket)
+The application uses a WebSocket connection to monitor server health.
+- **Backend**: `/ws` endpoint in `main.py` accepts connections and keeps them alive.
+- **Frontend**: `useServerStatus` hook attempts to connect to the backend.
+- **UI**: The Navbar displays a green dot if connected, red if disconnected.
+
+### 5. Running the Project
 
 1. **Start MongoDB**:
    ```bash
@@ -59,7 +66,12 @@ The backend code is organized as follows:
    uvicorn main:app --reload
    ```
 
-3. **Test**:
+3. **Start Frontend**:
+   ```bash
+   npm run dev
+   ```
+
+4. **Test**:
    ```bash
    python tests/test_workflow_api.py
    ```
