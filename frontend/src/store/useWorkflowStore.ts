@@ -33,18 +33,11 @@ interface WorkflowState {
 }
 
 
-const initialWorkflowId = uuidv4();
+
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
-    workflows: [
-        {
-            id: initialWorkflowId,
-            name: 'Workflow 1',
-            nodes: [],
-            edges: [],
-        },
-    ],
-    activeId: initialWorkflowId,
+    workflows: [],
+    activeId: null,
     isCreatingWorkflow: false,
 
     startWorkflowCreation: () => {

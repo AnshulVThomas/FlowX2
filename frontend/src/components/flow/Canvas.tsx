@@ -22,26 +22,19 @@ export function Canvas() {
     const reactFlowWrapper = useRef(null);
     const { screenToFlowPosition } = useReactFlow();
 
-    const {
-        nodes,
-        edges,
-        onNodesChange,
-        onEdgesChange,
-        onConnect,
-        addNode,
-    } = useWorkflowStore(
-        useShallow((state) => {
-            const activeWorkflow = state.workflows.find((w) => w.id === state.activeId);
-            return {
-                nodes: activeWorkflow?.nodes || [],
-                edges: activeWorkflow?.edges || [],
-                onNodesChange: state.onNodesChange,
-                onEdgesChange: state.onEdgesChange,
-                onConnect: state.onConnect,
-                addNode: state.addNode,
-            };
-        })
+    // Separate selectors to avoid infinite loops
+    const activeWorkflow = useWorkflowStore(
+        useShallow((state) => state.workflows.find((w) => w.id === state.activeId))
     );
+
+    const nodes = activeWorkflow?.nodes || [];
+    const edges = activeWorkflow?.edges || [];
+
+    const onNodesChange = useWorkflowStore((state) => state.onNodesChange);
+    const onEdgesChange = useWorkflowStore((state) => state.onEdgesChange);
+    const onConnect = useWorkflowStore((state) => state.onConnect);
+    const addNode = useWorkflowStore((state) => state.addNode);
+
 
     const onDragOver = useCallback((event: React.DragEvent) => {
         event.preventDefault();

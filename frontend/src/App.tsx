@@ -19,6 +19,8 @@ function App() {
           if (workflows.length > 0) {
             setWorkflows(workflows);
             toast.success('Workflows synced with server');
+          } else {
+            toast.info('No workflows found. Create a new one to get started!');
           }
         })
         .catch(() => toast.error('Failed to sync workflows'));
