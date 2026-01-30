@@ -93,7 +93,6 @@ export function Canvas() {
                 onConnect={onConnect}
                 onDrop={onDrop}
                 onDragOver={onDragOver}
-                fitView
             >
                 <Controls />
                 <MiniMap />
