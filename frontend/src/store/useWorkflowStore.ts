@@ -29,6 +29,7 @@ interface WorkflowState {
     deleteWorkflow: (id: string) => void;
     updateWorkflowName: (id: string, name: string) => void;
     addNode: (node: Node) => void;
+    setWorkflows: (workflows: Workflow[]) => void;
 }
 
 
@@ -163,6 +164,13 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
                     return w;
                 }),
             };
+        });
+    },
+
+    setWorkflows: (workflows) => {
+        set({
+            workflows,
+            activeId: workflows.length > 0 ? workflows[0].id : null
         });
     },
 }));

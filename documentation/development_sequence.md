@@ -51,7 +51,17 @@ This document tracks the sequence of tasks completed to build the current system
    |
    v
 
-**7. Verification**
+**7. Workflow Retrieval Strategy**
+   - **Action**: Added `GET /workflows` endpoint to `backend/main.py`.
+   - **Action**: Updated `POST /workflows` to `upsert` (avoid duplicate saves).
+   - **Action**: Added `fetchWorkflows` to `frontend/src/services/api.ts`.
+   - **Action**: Added `setWorkflows` to `useWorkflowStore`.
+   - **Action**: Configured `App.tsx` to fetch workflows when WebSocket connects.
+   |
+   |
+   v
+
+**8. Verification**
+   - **Fixed**: Canvas resize bug by removing `fitView`.
    - Ran `backend/tests/test_workflow_api.py`.
-   - Verified Frontend UI indicators.
-   - Updated Documentation to reflect full features.
+   - Verified Frontend UI indicators and data persistence.
