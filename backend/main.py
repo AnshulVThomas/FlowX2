@@ -1,22 +1,29 @@
-from typing import Any, Dict, List, Optional
-
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Dict, Any
 
-from backend.graph import graph
+app = FastAPI()
 
-app = FastAPI(title="FlowX2 Backend")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-class ChatRequest(BaseModel):
-    messages: List[Dict[str, Any]]
-    configurable: Optional[Dict[str, Any]] = None
+class Workflow(BaseModel):
+    name: str
+    data: Dict[str, Any]
 
-@app.post("/chat")
-def chat_endpoint(request: ChatRequest):
-    inputs = {"messages": request.messages}
-    config = {"configurable": request.configurable or {}}
-    return graph.invoke(inputs, config)
+@app.get("/")
+async def read_root():
+    return {"message": "Hello World"}
 
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
+@app.post("/workflows")
+async def receive_workflow(workflow: Workflow):
+    # TODO: Process the workflow with LangGraph and store in MongoDB
+    print(f"Received workflow: {workflow.name}")
+    print(f"Workflow Data: {workflow.data}")
+    return {"status": "success", "received": workflow.name}
