@@ -16,7 +16,10 @@ import { fetchWorkflowDetails, deleteWorkflow as apiDeleteWorkflow, saveWorkflow
 interface WorkflowState {
     workflows: Workflow[];
     activeId: string | null;
-    createWorkflow: () => Promise<void>;
+    isCreatingWorkflow: boolean;
+    startWorkflowCreation: () => void;
+    cancelWorkflowCreation: () => void;
+    createWorkflow: (name: string) => Promise<void>;
     setActiveWorkflow: (id: string) => void;
     onNodesChange: (changes: NodeChange[]) => void;
     onEdgesChange: (changes: EdgeChange[]) => void;
@@ -24,7 +27,7 @@ interface WorkflowState {
     deleteWorkflow: (id: string) => Promise<void>;
     updateWorkflowName: (id: string, name: string) => void;
     addNode: (node: Node) => void;
-    setWorkflows: (workflows: Workflow[]) => void;
+    setWorkflows: (workflows: Workflow[] | WorkflowSummary[]) => void;
     markClean: (id: string) => void;
     isWorkflowDirty: (id: string) => boolean;
 }
@@ -42,19 +45,30 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         },
     ],
     activeId: initialWorkflowId,
+    isCreatingWorkflow: false,
 
-    createWorkflow: async () => {
+    startWorkflowCreation: () => {
+        set({ isCreatingWorkflow: true });
+    },
+
+    cancelWorkflowCreation: () => {
+        set({ isCreatingWorkflow: false });
+    },
+
+    createWorkflow: async (name: string) => {
         const newId = uuidv4();
         const newWorkflow: Workflow = {
             id: newId,
-            name: `Workflow ${get().workflows.length + 1}`,
+            name: name.trim() || `Workflow ${get().workflows.length + 1}`,
             nodes: [],
             edges: [],
             isDirty: false,
+            detailsLoaded: true, // New workflow has all data already
         };
         set((state) => ({
             workflows: [...state.workflows, newWorkflow],
             activeId: newId,
+            isCreatingWorkflow: false,
         }));
 
         // Auto-save to database

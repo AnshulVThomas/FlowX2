@@ -1,4 +1,4 @@
-import { Plus, X, Save, Activity } from 'lucide-react';
+import { Plus, X, Save, Activity, Check } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useWorkflowStore } from '../../store/useWorkflowStore';
 import { saveWorkflow } from '../../services/api';
@@ -7,11 +7,13 @@ import { toast } from 'sonner';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
 
 export function Navbar() {
-    const { workflows, activeId, setActiveWorkflow, createWorkflow, deleteWorkflow, updateWorkflowName, markClean } = useWorkflowStore();
+    const { workflows, activeId, setActiveWorkflow, createWorkflow, deleteWorkflow, updateWorkflowName, markClean, isCreatingWorkflow, startWorkflowCreation, cancelWorkflowCreation } = useWorkflowStore();
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
+    const [newWorkflowName, setNewWorkflowName] = useState('');
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const newWorkflowInputRef = useRef<HTMLInputElement>(null);
     const isConnected = useServerStatus();
 
     useEffect(() => {
@@ -19,6 +21,12 @@ export function Navbar() {
             inputRef.current.focus();
         }
     }, [editingId]);
+
+    useEffect(() => {
+        if (isCreatingWorkflow && newWorkflowInputRef.current) {
+            newWorkflowInputRef.current.focus();
+        }
+    }, [isCreatingWorkflow]);
 
     const handleDoubleClick = (id: string, currentName: string) => {
         setEditingId(id);
@@ -69,20 +77,40 @@ export function Navbar() {
         }
     };
 
+    const handleNewWorkflowKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            handleCreateWorkflow();
+        } else if (e.key === 'Escape') {
+            cancelWorkflowCreation();
+            setNewWorkflowName('');
+        }
+    };
+
+    const handleCreateWorkflow = async () => {
+        if (newWorkflowName.trim()) {
+            await createWorkflow(newWorkflowName);
+            setNewWorkflowName('');
+        } else {
+            // If empty, use default name
+            await createWorkflow('');
+            setNewWorkflowName('');
+        }
+    };
+
     return (
         <>
-            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 p-1.5 rounded-full border border-white/20 bg-black/40 backdrop-blur-md shadow-xl">
-                <div className={`p-2 rounded-full ${isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'} transition-colors`} title={isConnected ? "Server Online" : "Server Offline"}>
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 p-1.5 rounded-full border border-white/20 bg-black/40 backdrop-blur-md shadow-xl max-w-[90vw]">
+                <div className={`p-2 rounded-full ${isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'} transition-colors flex-shrink-0`} title={isConnected ? "Server Online" : "Server Offline"}>
                     <Activity size={18} />
                 </div>
-                <div className="flex items-center gap-1 px-1">
+                <div className="flex items-center gap-1 px-1 overflow-x-auto max-w-[60vw] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                     {workflows.map((workflow) => (
                         <div
                             key={workflow.id}
                             onClick={() => setActiveWorkflow(workflow.id)}
                             onDoubleClick={() => handleDoubleClick(workflow.id, workflow.name)}
                             className={`
-              relative group flex items-center gap-2 px-4 py-2 rounded-full cursor-pointer transition-all duration-300 border border-transparent
+              relative group flex items-center gap-2 px-4 py-2 rounded-full cursor-pointer transition-all duration-300 border border-transparent flex-shrink-0
               ${activeId === workflow.id
                                     ? 'bg-white/10 text-white border-white/10 shadow-sm'
                                     : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
@@ -117,14 +145,51 @@ export function Navbar() {
                             )}
                         </div>
                     ))}
+
+                    {/* New Workflow Input - Bleed in */}
+                    {isCreatingWorkflow && (
+                        <div className="relative group flex items-center gap-2 px-4 py-2 rounded-full border border-purple-500/40 bg-purple-500/10 text-white shadow-sm flex-shrink-0 animate-in fade-in slide-in-from-right-2 duration-300">
+                            <input
+                                ref={newWorkflowInputRef}
+                                type="text"
+                                value={newWorkflowName}
+                                onChange={(e) => setNewWorkflowName(e.target.value)}
+                                onKeyDown={handleNewWorkflowKeyDown}
+                                placeholder="Workflow name..."
+                                className="w-32 bg-transparent border-b border-purple-400/50 outline-none text-sm font-medium text-white placeholder:text-gray-400 px-1"
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                            <button
+                                onClick={handleCreateWorkflow}
+                                className="p-0.5 hover:bg-green-500/20 text-gray-400 hover:text-green-400 rounded-full transition-all"
+                                title="Create"
+                            >
+                                <Check size={14} />
+                            </button>
+                            <button
+                                onClick={() => {
+                                    cancelWorkflowCreation();
+                                    setNewWorkflowName('');
+                                }}
+                                className="p-0.5 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded-full transition-all"
+                                title="Cancel"
+                            >
+                                <X size={12} />
+                            </button>
+                        </div>
+                    )}
                 </div>
 
-                <div className="w-[1px] h-6 bg-white/10 mx-2" />
+                <div className="w-[1px] h-6 bg-white/10 mx-2 flex-shrink-0" />
 
                 <div className="flex items-center gap-1 pr-1">
                     <button
-                        onClick={createWorkflow}
-                        className="p-2 rounded-full bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white transition-colors"
+                        onClick={startWorkflowCreation}
+                        disabled={isCreatingWorkflow}
+                        className={`p-2 rounded-full transition-colors ${isCreatingWorkflow
+                            ? 'bg-white/5 text-gray-500 cursor-not-allowed'
+                            : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white'
+                            }`}
                         title="Create New Workflow"
                     >
                         <Plus size={18} />
@@ -132,8 +197,8 @@ export function Navbar() {
                     <button
                         onClick={handleSaveData}
                         className={`p-2 rounded-full transition-all ${isDirty
-                                ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 hover:bg-yellow-500/30 shadow-lg shadow-yellow-500/20'
-                                : 'bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20'
+                            ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 hover:bg-yellow-500/30 shadow-lg shadow-yellow-500/20'
+                            : 'bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20'
                             }`}
                         title={isDirty ? "Unsaved changes" : "Save Workflow"}
                     >
