@@ -1,4 +1,4 @@
-import type { Workflow } from '../store/useWorkflowStore';
+import type { Workflow, WorkflowSummary } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL //|| 'http://localhost:8000';
 
@@ -30,24 +30,53 @@ export const saveWorkflow = async (workflow: Workflow) => {
     }
 };
 
-export const fetchWorkflows = async (): Promise<Workflow[]> => {
+export const fetchWorkflows = async (): Promise<WorkflowSummary[]> => {
     try {
         const response = await fetch(`${API_URL}/workflows`);
         if (!response.ok) {
             throw new Error('Failed to fetch workflows');
         }
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching workflows:', error);
+        throw error;
+    }
+};
+
+export const fetchWorkflowDetails = async (id: string): Promise<Workflow> => {
+    try {
+        const response = await fetch(`${API_URL}/workflows/${id}`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch workflow details');
+        }
         const data = await response.json();
 
         // Transform backend data format back to frontend Workflow interface
-        // Backend stores nodes/edges in 'data' field, frontend expects flat structure
-        return data.map((item: any) => ({
-            id: item.id,
-            name: item.name,
-            nodes: item.data?.nodes || [],
-            edges: item.data?.edges || []
-        }));
+        return {
+            id: data.id,
+            name: data.name,
+            nodes: data.data?.nodes || [],
+            edges: data.data?.edges || []
+        };
     } catch (error) {
-        console.error('Error fetching workflows:', error);
+        console.error('Error fetching workflow details:', error);
+        throw error;
+    }
+};
+
+export const deleteWorkflow = async (id: string) => {
+    try {
+        const response = await fetch(`${API_URL}/workflows/${id}`, {
+            method: 'DELETE',
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to delete workflow');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error deleting workflow:', error);
         throw error;
     }
 };

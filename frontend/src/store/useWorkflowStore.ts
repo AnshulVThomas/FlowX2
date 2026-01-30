@@ -10,13 +10,8 @@ import {
     type NodeChange,
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
-
-export interface Workflow {
-    id: string;
-    name: string;
-    nodes: Node[];
-    edges: Edge[];
-}
+import type { Workflow, WorkflowSummary } from '../types';
+import { fetchWorkflowDetails, deleteWorkflow as apiDeleteWorkflow } from '../services/api';
 
 interface WorkflowState {
     workflows: Workflow[];
@@ -26,7 +21,7 @@ interface WorkflowState {
     onNodesChange: (changes: NodeChange[]) => void;
     onEdgesChange: (changes: EdgeChange[]) => void;
     onConnect: (connection: Connection) => void;
-    deleteWorkflow: (id: string) => void;
+    deleteWorkflow: (id: string) => Promise<void>;
     updateWorkflowName: (id: string, name: string) => void;
     addNode: (node: Node) => void;
     setWorkflows: (workflows: Workflow[]) => void;
@@ -60,20 +55,46 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         }));
     },
 
-    setActiveWorkflow: (id) => {
-        set({ activeId: id });
+    setActiveWorkflow: async (id) => {
+        const { workflows } = get();
+        const workflow = workflows.find(w => w.id === id);
+
+        if (workflow && !workflow.detailsLoaded) {
+            try {
+                // Fetch full details
+                const details = await fetchWorkflowDetails(id);
+                // Update store
+                set((state) => ({
+                    workflows: state.workflows.map(w =>
+                        w.id === id ? { ...details, detailsLoaded: true } : w
+                    ),
+                    activeId: id
+                }));
+            } catch (error) {
+                console.error("Failed to load workflow details", error);
+                // Optionally handle error state
+            }
+        } else {
+            set({ activeId: id });
+        }
     },
 
-    deleteWorkflow: (id) => {
-        set((state) => {
-            const newWorkflows = state.workflows.filter(w => w.id !== id);
-            // If we deleted the active one, switch to the first available, or null if none
-            let newActiveId = state.activeId;
-            if (state.activeId === id) {
-                newActiveId = newWorkflows.length > 0 ? newWorkflows[0].id : null;
-            }
-            return { workflows: newWorkflows, activeId: newActiveId };
-        });
+    deleteWorkflow: async (id) => {
+        try {
+            await apiDeleteWorkflow(id);
+            set((state) => {
+                const newWorkflows = state.workflows.filter(w => w.id !== id);
+                // If we deleted the active one, switch to the first available, or null if none
+                let newActiveId = state.activeId;
+                if (state.activeId === id) {
+                    newActiveId = newWorkflows.length > 0 ? newWorkflows[0].id : null;
+                }
+                return { workflows: newWorkflows, activeId: newActiveId };
+            });
+        } catch (error) {
+            console.error("Failed to delete workflow", error);
+            throw error; // Let component handle UI feedback
+        }
     },
 
     updateWorkflowName: (id, name) => {
@@ -167,11 +188,33 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         });
     },
 
-    setWorkflows: (workflows) => {
-        set({
-            workflows,
-            activeId: workflows.length > 0 ? workflows[0].id : null
+    setWorkflows: (workflows: Workflow[] | WorkflowSummary[]) => {
+        // Map summaries to full objects (initially empty nodes/edges if summary)
+        const mappedWorkflows: Workflow[] = workflows.map(w => {
+            if ('nodes' in w) {
+                // It's already a full Workflow
+                return { ...w, detailsLoaded: true };
+            } else {
+                // It's a summary
+                return {
+                    id: w.id,
+                    name: w.name,
+                    nodes: [],
+                    edges: [],
+                    detailsLoaded: false
+                };
+            }
         });
+
+        set({
+            workflows: mappedWorkflows,
+            activeId: mappedWorkflows.length > 0 ? mappedWorkflows[0].id : null
+        });
+
+        // If there is an active workflow, ensure its details are loaded
+        if (mappedWorkflows.length > 0) {
+            get().setActiveWorkflow(mappedWorkflows[0].id);
+        }
     },
 }));
 

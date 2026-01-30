@@ -5,6 +5,10 @@ class Position(BaseModel):
     x: float
     y: float
 
+class WorkflowSummary(BaseModel):
+    id: str
+    name: str
+
 class Node(BaseModel):
     id: str
     type: Optional[str] = "default"

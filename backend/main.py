@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from database.connection import db
-from models.workflow import Workflow
+from models.workflow import Workflow, WorkflowSummary
 from contextlib import asynccontextmanager
 from typing import List
 
@@ -61,11 +61,12 @@ async def receive_workflow(workflow: Workflow):
         
         return {"status": "success", "received": workflow.name, "id": new_id}
 
-@app.get("/workflows", response_model=List[Workflow])
+@app.get("/workflows", response_model=List[WorkflowSummary])
 async def get_workflows():
     database = db.get_db()
     workflows = []
-    cursor = database.workflows.find({})
+    # Only fetch id and name, exclude data
+    cursor = database.workflows.find({}, {"name": 1, "id": 1})
     async for document in cursor:
         # Ensure 'id' is present (fallback to _id if missing)
         if "id" not in document or document["id"] is None:
@@ -75,3 +76,29 @@ async def get_workflows():
         document.pop("_id", None)
         workflows.append(document)
     return workflows
+
+@app.get("/workflows/{workflow_id}", response_model=Workflow)
+async def get_workflow_details(workflow_id: str):
+    database = db.get_db()
+    document = await database.workflows.find_one({"id": workflow_id})
+    
+    if not document:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+        
+    # Ensure 'id' is present (fallback to _id if missing)
+    if "id" not in document or document["id"] is None:
+        document["id"] = str(document["_id"])
+    
+    # Always remove internal MongoDB _id
+    document.pop("_id", None)
+    return document
+
+@app.delete("/workflows/{workflow_id}")
+async def delete_workflow(workflow_id: str):
+    database = db.get_db()
+    result = await database.workflows.delete_one({"id": workflow_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+        
+    return {"status": "success", "message": "Workflow deleted"}
