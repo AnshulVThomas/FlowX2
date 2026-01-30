@@ -11,42 +11,51 @@ import {
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
 import type { Workflow, WorkflowSummary } from '../types';
-import { fetchWorkflowDetails, deleteWorkflow as apiDeleteWorkflow, saveWorkflow } from '../services/api';
+import { fetchWorkflowDetails, deleteWorkflow as apiDeleteWorkflow, saveWorkflow as apiSaveWorkflow } from '../services/api';
 
 interface WorkflowState {
+    // Global Lists
     workflows: Workflow[];
     activeId: string | null;
     isCreatingWorkflow: boolean;
+
+    // ⚡️ ACTIVE EDITOR STATE
+    nodes: Node[];
+    edges: Edge[];
+    isDirty: boolean; // <--- The new source of truth for the active workflow
+
+    // Actions
     startWorkflowCreation: () => void;
     cancelWorkflowCreation: () => void;
     createWorkflow: (name: string) => Promise<void>;
     setActiveWorkflow: (id: string) => void;
+
+    // Editor Actions
     onNodesChange: (changes: NodeChange[]) => void;
     onEdgesChange: (changes: EdgeChange[]) => void;
     onConnect: (connection: Connection) => void;
+    addNode: (node: Node) => void;
+
+    // Workflow Management
     deleteWorkflow: (id: string) => Promise<void>;
     updateWorkflowName: (id: string, name: string) => void;
-    addNode: (node: Node) => void;
     setWorkflows: (workflows: Workflow[] | WorkflowSummary[]) => void;
-    markClean: (id: string) => void;
-    isWorkflowDirty: (id: string) => boolean;
+
+    // Saving & State
+    saveActiveWorkflow: () => Promise<void>;
+    markClean: (id?: string) => void; // <--- Re-added for compatibility
 }
-
-
-
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     workflows: [],
     activeId: null,
     isCreatingWorkflow: false,
+    nodes: [],
+    edges: [],
+    isDirty: false,
 
-    startWorkflowCreation: () => {
-        set({ isCreatingWorkflow: true });
-    },
-
-    cancelWorkflowCreation: () => {
-        set({ isCreatingWorkflow: false });
-    },
+    startWorkflowCreation: () => set({ isCreatingWorkflow: true }),
+    cancelWorkflowCreation: () => set({ isCreatingWorkflow: false }),
 
     createWorkflow: async (name: string) => {
         const newId = uuidv4();
@@ -56,17 +65,20 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
             nodes: [],
             edges: [],
             isDirty: false,
-            detailsLoaded: true, // New workflow has all data already
+            detailsLoaded: true,
         };
+
         set((state) => ({
             workflows: [...state.workflows, newWorkflow],
             activeId: newId,
+            nodes: [],
+            edges: [],
+            isDirty: false,
             isCreatingWorkflow: false,
         }));
 
-        // Auto-save to database
         try {
-            await saveWorkflow(newWorkflow);
+            await apiSaveWorkflow(newWorkflow);
         } catch (error) {
             console.error('Failed to auto-save new workflow', error);
         }
@@ -76,23 +88,31 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         const { workflows } = get();
         const workflow = workflows.find(w => w.id === id);
 
-        if (workflow && !workflow.detailsLoaded) {
-            try {
-                // Fetch full details
-                const details = await fetchWorkflowDetails(id);
-                // Update store
-                set((state) => ({
-                    workflows: state.workflows.map(w =>
-                        w.id === id ? { ...details, detailsLoaded: true } : w
-                    ),
-                    activeId: id
-                }));
-            } catch (error) {
-                console.error("Failed to load workflow details", error);
-                // Optionally handle error state
+        if (workflow) {
+            set({
+                activeId: id,
+                nodes: workflow.nodes || [],
+                edges: workflow.edges || [],
+                isDirty: false // Reset dirty state when switching
+            });
+
+            if (!workflow.detailsLoaded) {
+                try {
+                    const details = await fetchWorkflowDetails(id);
+                    set((state) => {
+                        const isStillActive = state.activeId === id;
+                        return {
+                            workflows: state.workflows.map(w =>
+                                w.id === id ? { ...details, detailsLoaded: true } : w
+                            ),
+                            nodes: isStillActive ? details.nodes : state.nodes,
+                            edges: isStillActive ? details.edges : state.edges,
+                        };
+                    });
+                } catch (error) {
+                    console.error("Failed to load workflow details", error);
+                }
             }
-        } else {
-            set({ activeId: id });
         }
     },
 
@@ -101,190 +121,113 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
             await apiDeleteWorkflow(id);
             set((state) => {
                 const newWorkflows = state.workflows.filter(w => w.id !== id);
-                // If we deleted the active one, switch to the first available, or null if none
                 let newActiveId = state.activeId;
+
+                // If deleting active workflow, switch to another
                 if (state.activeId === id) {
                     newActiveId = newWorkflows.length > 0 ? newWorkflows[0].id : null;
+                    const nextW = newWorkflows[0];
+                    return {
+                        workflows: newWorkflows,
+                        activeId: newActiveId,
+                        nodes: nextW ? nextW.nodes : [],
+                        edges: nextW ? nextW.edges : [],
+                        isDirty: false
+                    };
                 }
+
                 return { workflows: newWorkflows, activeId: newActiveId };
             });
         } catch (error) {
             console.error("Failed to delete workflow", error);
-            throw error; // Let component handle UI feedback
+            throw error;
         }
     },
 
     updateWorkflowName: (id, name) => {
         set((state) => ({
-            workflows: state.workflows.map(w => w.id === id ? { ...w, name, isDirty: true } : w)
+            workflows: state.workflows.map(w => w.id === id ? { ...w, name } : w)
         }));
     },
 
     onNodesChange: (changes) => {
-        // Check if any changes are node removals
         const hasRemoval = changes.some(change => change.type === 'remove');
-
-        set((state) => {
-            const { activeId, workflows } = state;
-            if (!activeId) return state;
-
-            return {
-                workflows: workflows.map((w) => {
-                    if (w.id === activeId) {
-                        return {
-                            ...w,
-                            nodes: applyNodeChanges(changes, w.nodes),
-                            isDirty: true,
-                        };
-                    }
-                    return w;
-                }),
-            };
-        });
-
-        // Auto-save when node is deleted
-        if (hasRemoval) {
-            const { activeId, workflows } = get();
-            const activeWorkflow = workflows.find(w => w.id === activeId);
-            if (activeWorkflow) {
-                saveWorkflow(activeWorkflow)
-                    .then(() => {
-                        get().markClean(activeWorkflow.id);
-                        console.log('Node deleted and workflow auto-saved');
-                    })
-                    .catch((error) => {
-                        console.error('Failed to auto-save after node deletion', error);
-                    });
-            }
-        }
+        set((state) => ({
+            nodes: applyNodeChanges(changes, state.nodes),
+            isDirty: true
+        }));
+        if (hasRemoval) get().saveActiveWorkflow();
     },
 
     onEdgesChange: (changes) => {
-        // Check if any changes are edge removals
         const hasRemoval = changes.some(change => change.type === 'remove');
-
-        set((state) => {
-            const { activeId, workflows } = state;
-            if (!activeId) return state;
-
-            return {
-                workflows: workflows.map((w) => {
-                    if (w.id === activeId) {
-                        return {
-                            ...w,
-                            edges: applyEdgeChanges(changes, w.edges),
-                            isDirty: true,
-                        };
-                    }
-                    return w;
-                }),
-            };
-        });
-
-        // Auto-save when edge is deleted
-        if (hasRemoval) {
-            const { activeId, workflows } = get();
-            const activeWorkflow = workflows.find(w => w.id === activeId);
-            if (activeWorkflow) {
-                saveWorkflow(activeWorkflow)
-                    .then(() => {
-                        get().markClean(activeWorkflow.id);
-                        console.log('Edge deleted and workflow auto-saved');
-                    })
-                    .catch((error) => {
-                        console.error('Failed to auto-save after edge deletion', error);
-                    });
-            }
-        }
+        set((state) => ({
+            edges: applyEdgeChanges(changes, state.edges),
+            isDirty: true
+        }));
+        if (hasRemoval) get().saveActiveWorkflow();
     },
 
     onConnect: (connection) => {
-        set((state) => {
-            const { activeId, workflows } = state;
-            if (!activeId) return state;
-
-            return {
-                workflows: workflows.map((w) => {
-                    if (w.id === activeId) {
-                        return {
-                            ...w,
-                            edges: addEdge(connection, w.edges),
-                            isDirty: true,
-                        };
-                    }
-                    return w;
-                }),
-            };
-        });
+        set((state) => ({
+            edges: addEdge(connection, state.edges),
+            isDirty: true
+        }));
     },
 
     addNode: (node) => {
-        set((state) => {
-            const { activeId, workflows } = state;
-            if (!activeId) return state;
-
-            // Check if attempting to add startNode when one already exists
-            const activeWorkflow = workflows.find(w => w.id === activeId);
-            if (activeWorkflow && node.type === 'startNode') {
-                const hasStartNode = activeWorkflow.nodes.some(n => n.type === 'startNode');
-                if (hasStartNode) {
-                    return state; // Prevent adding another start node
-                }
-            }
-
-            return {
-                workflows: workflows.map((w) => {
-                    if (w.id === activeId) {
-                        return {
-                            ...w,
-                            nodes: [...w.nodes, node],
-                            isDirty: true,
-                        };
-                    }
-                    return w;
-                }),
-            };
-        });
+        const { nodes } = get();
+        if (node.type === 'startNode' && nodes.some(n => n.type === 'startNode')) return;
+        set((state) => ({
+            nodes: [...state.nodes, node],
+            isDirty: true
+        }));
     },
 
-    setWorkflows: (workflows: Workflow[] | WorkflowSummary[]) => {
-        // Map summaries to full objects (initially empty nodes/edges if summary)
+    setWorkflows: (workflows) => {
         const mappedWorkflows: Workflow[] = workflows.map(w => {
-            if ('nodes' in w) {
-                // It's already a full Workflow
-                return { ...w, detailsLoaded: true };
-            } else {
-                // It's a summary
-                return {
-                    id: w.id,
-                    name: w.name,
-                    nodes: [],
-                    edges: [],
-                    detailsLoaded: false
-                };
-            }
+            if ('nodes' in w) return { ...w, detailsLoaded: true };
+            return { ...w, nodes: [], edges: [], detailsLoaded: false } as Workflow;
         });
 
+        const first = mappedWorkflows[0];
         set({
             workflows: mappedWorkflows,
-            activeId: mappedWorkflows.length > 0 ? mappedWorkflows[0].id : null
+            activeId: first?.id || null,
+            nodes: first?.nodes || [],
+            edges: first?.edges || [],
         });
 
-        // If there is an active workflow, ensure its details are loaded
-        if (mappedWorkflows.length > 0) {
-            get().setActiveWorkflow(mappedWorkflows[0].id);
+        if (first) get().setActiveWorkflow(first.id);
+    },
+
+    saveActiveWorkflow: async () => {
+        const { activeId, nodes, edges, workflows } = get();
+        if (!activeId) return;
+
+        const currentMeta = workflows.find(w => w.id === activeId);
+        if (!currentMeta) return;
+
+        const workflowToSave: Workflow = { ...currentMeta, nodes, edges };
+
+        try {
+            await apiSaveWorkflow(workflowToSave);
+            set(state => ({
+                isDirty: false,
+                // Update the cache in the list
+                workflows: state.workflows.map(w => w.id === activeId ? workflowToSave : w)
+            }));
+        } catch (error) {
+            console.error('Failed to save workflow', error);
+            throw error; // Re-throw so UI can show error toast
         }
     },
 
     markClean: (id) => {
-        set((state) => ({
-            workflows: state.workflows.map(w => w.id === id ? { ...w, isDirty: false } : w)
-        }));
-    },
-
-    isWorkflowDirty: (id) => {
-        const workflow = get().workflows.find(w => w.id === id);
-        return workflow?.isDirty ?? false;
-    },
+        // If the ID matches the active one (or no ID provided), clean the editor state
+        const { activeId } = get();
+        if (!id || id === activeId) {
+            set({ isDirty: false });
+        }
+    }
 }));
-

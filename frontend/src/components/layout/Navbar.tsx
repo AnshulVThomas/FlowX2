@@ -1,13 +1,28 @@
 import { Plus, X, Save, Activity, Check } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useWorkflowStore } from '../../store/useWorkflowStore';
-import { saveWorkflow } from '../../services/api';
 import { useServerStatus } from '../../hooks/useServerStatus';
 import { toast } from 'sonner';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
 
 export function Navbar() {
-    const { workflows, activeId, setActiveWorkflow, createWorkflow, deleteWorkflow, updateWorkflowName, markClean, isCreatingWorkflow, startWorkflowCreation, cancelWorkflowCreation } = useWorkflowStore();
+    const workflows = useWorkflowStore((state) => state.workflows);
+    const activeId = useWorkflowStore(state => state.activeId);
+
+    // ⚡️ UPDATED: Read dirty state directly from root (Faster!)
+    const isDirty = useWorkflowStore(state => state.isDirty);
+
+    const isCreatingWorkflow = useWorkflowStore(state => state.isCreatingWorkflow);
+    const saveActiveWorkflow = useWorkflowStore(state => state.saveActiveWorkflow);
+
+    // Actions
+    const setActiveWorkflow = useWorkflowStore(state => state.setActiveWorkflow);
+    const createWorkflow = useWorkflowStore(state => state.createWorkflow);
+    const deleteWorkflow = useWorkflowStore(state => state.deleteWorkflow);
+    const updateWorkflowName = useWorkflowStore(state => state.updateWorkflowName);
+    const startWorkflowCreation = useWorkflowStore(state => state.startWorkflowCreation);
+    const cancelWorkflowCreation = useWorkflowStore(state => state.cancelWorkflowCreation);
+
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
     const [newWorkflowName, setNewWorkflowName] = useState('');
@@ -17,15 +32,11 @@ export function Navbar() {
     const isConnected = useServerStatus();
 
     useEffect(() => {
-        if (editingId && inputRef.current) {
-            inputRef.current.focus();
-        }
+        if (editingId && inputRef.current) inputRef.current.focus();
     }, [editingId]);
 
     useEffect(() => {
-        if (isCreatingWorkflow && newWorkflowInputRef.current) {
-            newWorkflowInputRef.current.focus();
-        }
+        if (isCreatingWorkflow && newWorkflowInputRef.current) newWorkflowInputRef.current.focus();
     }, [isCreatingWorkflow]);
 
     const handleDoubleClick = (id: string, currentName: string) => {
@@ -40,22 +51,15 @@ export function Navbar() {
         setEditingId(null);
     };
 
+    // ⚡️ UPDATED: Simpler save logic using store action
     const handleSaveData = async () => {
-        const activeWorkflow = workflows.find(w => w.id === activeId);
-        if (activeWorkflow) {
-            try {
-                await saveWorkflow(activeWorkflow);
-                markClean(activeWorkflow.id);
-                toast.success('Workflow saved successfully');
-            } catch (error) {
-                toast.error('Failed to save workflow');
-            }
+        try {
+            await saveActiveWorkflow();
+            toast.success('Workflow saved successfully');
+        } catch (error) {
+            toast.error('Failed to save workflow');
         }
     };
-
-    // Get active workflow dirty state
-    const activeWorkflow = workflows.find(w => w.id === activeId);
-    const isDirty = activeWorkflow?.isDirty ?? false;
 
     const handleDeleteConfirm = async () => {
         if (deleteId) {
@@ -70,31 +74,21 @@ export function Navbar() {
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            handleSaveName();
-        } else if (e.key === 'Escape') {
-            setEditingId(null);
-        }
+        if (e.key === 'Enter') handleSaveName();
+        else if (e.key === 'Escape') setEditingId(null);
     };
 
     const handleNewWorkflowKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            handleCreateWorkflow();
-        } else if (e.key === 'Escape') {
+        if (e.key === 'Enter') handleCreateWorkflow();
+        else if (e.key === 'Escape') {
             cancelWorkflowCreation();
             setNewWorkflowName('');
         }
     };
 
     const handleCreateWorkflow = async () => {
-        if (newWorkflowName.trim()) {
-            await createWorkflow(newWorkflowName);
-            setNewWorkflowName('');
-        } else {
-            // If empty, use default name
-            await createWorkflow('');
-            setNewWorkflowName('');
-        }
+        await createWorkflow(newWorkflowName.trim() || '');
+        setNewWorkflowName('');
     };
 
     return (
@@ -146,7 +140,6 @@ export function Navbar() {
                         </div>
                     ))}
 
-                    {/* New Workflow Input - Bleed in */}
                     {isCreatingWorkflow && (
                         <div className="relative group flex items-center gap-2 px-4 py-2 rounded-full border border-purple-500/40 bg-purple-500/10 text-white shadow-sm flex-shrink-0 animate-in fade-in slide-in-from-right-2 duration-300">
                             <input
@@ -159,23 +152,8 @@ export function Navbar() {
                                 className="w-32 bg-transparent border-b border-purple-400/50 outline-none text-sm font-medium text-white placeholder:text-gray-400 px-1"
                                 onClick={(e) => e.stopPropagation()}
                             />
-                            <button
-                                onClick={handleCreateWorkflow}
-                                className="p-0.5 hover:bg-green-500/20 text-gray-400 hover:text-green-400 rounded-full transition-all"
-                                title="Create"
-                            >
-                                <Check size={14} />
-                            </button>
-                            <button
-                                onClick={() => {
-                                    cancelWorkflowCreation();
-                                    setNewWorkflowName('');
-                                }}
-                                className="p-0.5 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded-full transition-all"
-                                title="Cancel"
-                            >
-                                <X size={12} />
-                            </button>
+                            <button onClick={handleCreateWorkflow} className="p-0.5 hover:bg-green-500/20 text-gray-400 hover:text-green-400 rounded-full transition-all"><Check size={14} /></button>
+                            <button onClick={() => { cancelWorkflowCreation(); setNewWorkflowName(''); }} className="p-0.5 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded-full transition-all"><X size={12} /></button>
                         </div>
                     )}
                 </div>
@@ -186,11 +164,7 @@ export function Navbar() {
                     <button
                         onClick={startWorkflowCreation}
                         disabled={isCreatingWorkflow}
-                        className={`p-2 rounded-full transition-colors ${isCreatingWorkflow
-                            ? 'bg-white/5 text-gray-500 cursor-not-allowed'
-                            : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white'
-                            }`}
-                        title="Create New Workflow"
+                        className={`p-2 rounded-full transition-colors ${isCreatingWorkflow ? 'bg-white/5 text-gray-500 cursor-not-allowed' : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white'}`}
                     >
                         <Plus size={18} />
                     </button>
@@ -200,7 +174,6 @@ export function Navbar() {
                             ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 hover:bg-yellow-500/30 shadow-lg shadow-yellow-500/20'
                             : 'bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20'
                             }`}
-                        title={isDirty ? "Unsaved changes" : "Save Workflow"}
                     >
                         <Save size={18} />
                     </button>

@@ -2,12 +2,11 @@ import { useWorkflowStore } from "../../store/useWorkflowStore";
 import { Play } from "lucide-react";
 
 export function Sidebar() {
-    const { workflows, activeId } = useWorkflowStore();
-
-    // Find active workflow's nodes to check if we already have a START node
-    const activeWorkflow = workflows.find(w => w.id === activeId);
-    // Check for 'startNode' type now
-    const hasStartNode = activeWorkflow?.nodes.some(node => node.type === 'startNode');
+    // ⚡️ OPTIMIZED: Check the live 'nodes' array directly.
+    // This removes the heavy .find() on the workflows array.
+    const hasStartNode = useWorkflowStore((state) =>
+        state.nodes.some(node => node.type === 'startNode')
+    );
 
     const onDragStart = (event: React.DragEvent, nodeType: string, label: string) => {
         event.dataTransfer.setData('application/reactflow/type', nodeType);

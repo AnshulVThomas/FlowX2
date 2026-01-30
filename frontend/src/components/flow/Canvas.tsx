@@ -8,11 +8,13 @@ import {
     useReactFlow,
     Position,
 } from '@xyflow/react';
-import { useShallow } from 'zustand/react/shallow';
+// Note: useShallow is no longer strictly needed for nodes/edges 
+// because we are selecting the root state directly!
 import { useWorkflowStore } from '../../store/useWorkflowStore';
 import { v4 as uuidv4 } from 'uuid';
 import { StartNode } from '../../nodes/StartNode';
 import '@xyflow/react/dist/style.css';
+import { useShallow } from 'zustand/react/shallow';
 
 const nodeTypes = {
     startNode: StartNode,
@@ -22,19 +24,14 @@ export function Canvas() {
     const reactFlowWrapper = useRef(null);
     const { screenToFlowPosition } = useReactFlow();
 
-    // Separate selectors to avoid infinite loops
-    const activeWorkflow = useWorkflowStore(
-        useShallow((state) => state.workflows.find((w) => w.id === state.activeId))
-    );
-
-    const nodes = activeWorkflow?.nodes || [];
-    const edges = activeWorkflow?.edges || [];
-
+    // ⚡️ FAST: Direct selection from root state.
+    // No .find(), no complex object comparison.
+    const nodes = useWorkflowStore(useShallow((state) => state.nodes));
+    const edges = useWorkflowStore(useShallow((state) => state.edges));
     const onNodesChange = useWorkflowStore((state) => state.onNodesChange);
     const onEdgesChange = useWorkflowStore((state) => state.onEdgesChange);
     const onConnect = useWorkflowStore((state) => state.onConnect);
     const addNode = useWorkflowStore((state) => state.addNode);
-
 
     const onDragOver = useCallback((event: React.DragEvent) => {
         event.preventDefault();
@@ -91,6 +88,7 @@ export function Canvas() {
                 selectionOnDrag
                 panOnDrag={[1, 2]}
                 selectNodesOnDrag={false}
+                onlyRenderVisibleElements={true}
             >
                 <Controls />
                 <MiniMap />
