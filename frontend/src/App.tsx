@@ -1,11 +1,13 @@
-// updated file
-import { ReactFlowProvider } from 'reactflow'
-import FlowCanvas from './components/FlowCanvas'
+import { Canvas } from './components/flow/Canvas';
+import { Navbar } from './components/layout/Navbar';
 
-export default function App() {
+function App() {
   return (
-    <ReactFlowProvider>
-      <FlowCanvas />
-    </ReactFlowProvider>
+    <>
+      <Navbar />
+      <Canvas />
+    </>
   )
 }
+
+export default App
