@@ -202,4 +202,5 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({ onC
 
 TerminalComponent.displayName = 'TerminalComponent';
 
-export default TerminalComponent;
+// Memoize the component to prevent re-renders when parent props change but terminal props don't
+export default React.memo(TerminalComponent);
