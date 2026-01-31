@@ -23,6 +23,13 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({ onC
     const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
     const bufferRef = useRef(""); // Rolling buffer for fragmentation
 
+    const onExecuteRef = useRef(onCommandComplete);
+
+    // Keep ref updated
+    useEffect(() => {
+        onExecuteRef.current = onCommandComplete;
+    }, [onCommandComplete]);
+
     // Expose methods to parent
     useImperativeHandle(ref, () => ({
         runCommand: (cmd: string) => {
@@ -117,14 +124,14 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({ onC
             ws.onmessage = (event) => {
                 term?.write(event.data);
 
-                if (onCommandComplete) {
+                if (onExecuteRef.current) {
                     const chunk = event.data as string;
                     bufferRef.current += chunk;
                     if (bufferRef.current.length > 1000) bufferRef.current = bufferRef.current.slice(-1000);
                     const match = bufferRef.current.match(/\x1b]1337;DONE:(\d+)\x07/);
                     if (match) {
                         const exitCode = parseInt(match[1], 10);
-                        onCommandComplete(exitCode);
+                        onExecuteRef.current(exitCode);
                         bufferRef.current = "";
                     }
                 }

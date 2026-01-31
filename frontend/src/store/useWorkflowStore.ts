@@ -40,7 +40,7 @@ interface WorkflowState {
     deleteWorkflow: (id: string) => Promise<void>;
     updateWorkflowName: (id: string, name: string) => void;
     setWorkflows: (workflows: Workflow[] | WorkflowSummary[]) => void;
-    updateNodeData: (id: string, data: Partial<any>) => void; // <--- New Action
+    updateNodeData: (id: string, data: Partial<any>, shouldSave?: boolean) => void; // <--- New Action
 
     // Saving & State
     saveActiveWorkflow: () => Promise<void>;
@@ -192,7 +192,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         }));
     },
 
-    updateNodeData: (id, data) => {
+    updateNodeData: (id, data, shouldSave = false) => {
         set((state) => ({
             nodes: state.nodes.map((node) => {
                 if (node.id === id) {
@@ -202,6 +202,9 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
             }),
             isDirty: true,
         }));
+        if (shouldSave) {
+            get().saveActiveWorkflow();
+        }
     },
 
     setWorkflows: (workflows) => {

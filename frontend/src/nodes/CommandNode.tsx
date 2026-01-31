@@ -46,7 +46,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
     const updateHistory = (newHistory: typeof history) => {
         const truncated = newHistory.slice(0, 5);
         setHistory(truncated);
-        updateNodeData(id, { history: truncated });
+        updateNodeData(id, { history: truncated }, true);
     };
 
     // UI States
@@ -121,7 +121,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                 prompt: prompt,
                 command: response.ui_render.code_block,
                 ui_render: response.ui_render
-            });
+            }, true);
 
             // Add to History
             const newEntry = {
@@ -146,7 +146,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
             const parsed = JSON.parse(contextString);
             setJsonError('');
             setShowSettings(false);
-            updateNodeData(id, { system_context: parsed });
+            updateNodeData(id, { system_context: parsed }, true);
             toast.success('Context saved');
         } catch (e) {
             setJsonError('Invalid JSON');
@@ -411,7 +411,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                                         updateHistory(newHistory);
                                     }
 
-                                    setTimeout(() => setResultStatus(null), 3000);
+                                    // setTimeout(() => setResultStatus(null), 3000);
                                 }}
                             />
                         </div>
