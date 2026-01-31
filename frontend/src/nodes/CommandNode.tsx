@@ -1,6 +1,6 @@
-import { useRef, memo, useState, useCallback } from 'react';
+import { useRef, memo, useState, useCallback, useEffect } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { Sparkles, Terminal, Play, Settings, Save, RefreshCw, Square, Check, AlertTriangle, ShieldAlert, Maximize2, Minimize2, History, X } from 'lucide-react';
+import { Sparkles, Terminal, Play, Settings, Save, RefreshCw, Square, Check, AlertTriangle, ShieldAlert, Maximize2, Minimize2, History, X, Lock, Unlock, Info } from 'lucide-react';
 import { generateCommand, fetchSystemInfo } from '../services/api';
 import { useWorkflowStore } from '../store/useWorkflowStore';
 import TerminalComponent, { type TerminalRef } from '../components/TerminalComponent';
@@ -15,6 +15,8 @@ export type CommandNodeData = Node<{
         code_block: string;
         language: string;
         badge_color: string;
+        description: string;
+        system_effect: string;
     };
 }>;
 
@@ -35,8 +37,9 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
     const [command, setCommand] = useState(data.command || '');
 
     // History State (Local only, not persisted to DB)
-    const [history, setHistory] = useState<Array<{ prompt: string, command: string, timestamp: number, type: 'generated' | 'executed' }>>([]);
+    const [history, setHistory] = useState<Array<{ prompt: string, command: string, timestamp: number, type: 'generated' | 'executed', status?: 'success' | 'failure' | 'pending' }>>([]);
     const [showHistory, setShowHistory] = useState(false);
+    const [showInfo, setShowInfo] = useState(false);
 
     // UI States
     const [isLoading, setIsLoading] = useState(false);
@@ -45,8 +48,20 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
     const [isExpanded, setIsExpanded] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
 
+    // Safety Lock State
+    const [isLocked, setIsLocked] = useState(false);
+
     // Context & Data
     const [uiRender, setUiRender] = useState(data.ui_render);
+
+    // Auto-lock high risk commands
+    useEffect(() => {
+        if (uiRender?.badge_color === 'red' || uiRender?.badge_color === 'yellow') {
+            setIsLocked(true);
+        } else {
+            setIsLocked(false);
+        }
+    }, [uiRender]);
     const [contextString, setContextString] = useState(JSON.stringify(data.system_context || {}, null, 2));
     const [jsonError, setJsonError] = useState('');
     const [resultStatus, setResultStatus] = useState<'success' | 'error' | null>(null);
@@ -64,7 +79,8 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
             prompt: prompt || 'Manual Execution',
             command: command,
             timestamp: Date.now(),
-            type: 'executed'
+            type: 'executed',
+            status: 'pending'
         }, ...prev]);
 
         setTimeout(() => {
@@ -181,7 +197,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                             // OPTIMIZATION 4: 'nodrag' class prevents React Flow from hijacking focus
                             <input
                                 type="text"
-                                className="nodrag w-full text-xs font-medium text-gray-700 placeholder:text-gray-400 bg-transparent border-none p-0 focus:ring-0"
+                                className="nodrag w-full text-xs font-medium text-gray-700 placeholder:text-gray-400 bg-stone-50 border border-transparent focus:border-indigo-200 focus:bg-white focus:ring-2 focus:ring-indigo-50/50 rounded px-2 py-1 transition-all duration-200"
                                 value={prompt}
                                 onChange={(e) => setPrompt(e.target.value)}
                                 onBlur={() => updateNodeData(id, { prompt })}
@@ -238,6 +254,41 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                 {/* --- BODY --- */}
                 <div className="relative flex-grow bg-[#1e1e1e] min-h-[160px] flex flex-col overflow-hidden">
 
+                    {/* Info Overlay (Description & Impact) */}
+                    {uiRender && showInfo && !showSettings && (
+                        <div className="absolute inset-0 bg-stone-50 z-30 p-3 flex flex-col animate-in fade-in zoom-in-95 duration-200">
+                            <div className="flex items-center justify-between pb-2 border-b border-gray-100 mb-2">
+                                <span className="text-[10px] uppercase font-bold text-gray-400">Command Details</span>
+                                <button onClick={() => setShowInfo(false)} className="text-gray-400 hover:text-gray-600"><X size={12} /></button>
+                            </div>
+
+                            <div className="flex-grow overflow-y-auto space-y-4">
+                                {/* Description */}
+                                <div className="flex gap-2 items-start">
+                                    <Info size={14} className="mt-0.5 text-stone-400 flex-shrink-0" />
+                                    <p className="text-xs text-stone-600 leading-relaxed font-medium">
+                                        {uiRender.description || "No description provided."}
+                                    </p>
+                                </div>
+
+                                {/* System Impact */}
+                                {uiRender.badge_color !== 'green' && (
+                                    <div className="flex gap-2 items-start bg-amber-50 p-2 rounded border border-amber-100/50">
+                                        <AlertTriangle size={14} className="mt-0.5 text-amber-500 flex-shrink-0" />
+                                        <div>
+                                            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wide block mb-0.5">
+                                                System Impact
+                                            </span>
+                                            <p className="text-xs text-amber-700 leading-relaxed">
+                                                {uiRender.system_effect}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Settings Overlay */}
                     {showSettings && (
                         <div className="absolute inset-0 bg-stone-50 z-30 p-3 flex flex-col animate-in fade-in zoom-in-95 duration-200">
@@ -288,7 +339,13 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                                             <div className="flex justify-between items-start mb-1 gap-2">
                                                 <div className="flex items-center gap-1.5 min-w-0">
                                                     {item.type === 'executed' ? (
-                                                        <Play size={10} className="text-emerald-500 shrink-0" />
+                                                        item.status === 'success' ? (
+                                                            <Check size={10} className="text-emerald-500 shrink-0" />
+                                                        ) : item.status === 'failure' ? (
+                                                            <X size={10} className="text-rose-500 shrink-0" />
+                                                        ) : (
+                                                            <Play size={10} className="text-stone-400 shrink-0" />
+                                                        )
                                                     ) : (
                                                         <Sparkles size={10} className="text-indigo-500 shrink-0" />
                                                     )}
@@ -332,6 +389,20 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                                         setResultStatus('error');
                                         toast.error(`Exit Code: ${code}`);
                                     }
+
+                                    // Update history status
+                                    setHistory(prev => {
+                                        const newHistory = [...prev];
+                                        const lastPendingIdx = newHistory.findIndex(h => h.type === 'executed' && h.status === 'pending');
+                                        if (lastPendingIdx !== -1) {
+                                            newHistory[lastPendingIdx] = {
+                                                ...newHistory[lastPendingIdx],
+                                                status: code === 0 ? 'success' : 'failure'
+                                            };
+                                        }
+                                        return newHistory;
+                                    });
+
                                     setTimeout(() => setResultStatus(null), 3000);
                                 }}
                             />
@@ -375,14 +446,67 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                         </button>
                     )}
 
+                    {/* RUN / STOP / LOCK LOGIC */}
                     {isRunning ? (
                         <button onClick={handleStop} className="flex items-center gap-1.5 px-4 py-1.5 bg-rose-50 text-rose-600 border border-rose-100 rounded-md text-xs font-semibold hover:bg-rose-100 hover:border-rose-200 transition-all shadow-sm animate-pulse">
                             <Square size={12} className="fill-current" /> Stop
                         </button>
-                    ) : (
-                        <button onClick={handleRun} className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded-md text-xs font-semibold hover:bg-indigo-700 hover:shadow-indigo-500/20 shadow-sm transition-all">
-                            <Play size={12} className="fill-current" /> Run
+                    ) : isLocked ? (
+                        /* LOCKED STATE */
+                        <button
+                            onClick={() => {
+                                setIsLocked(false);
+                                toast('Controls Unlocked');
+                                // Auto-show info if there is risks
+                                if (uiRender?.badge_color !== 'green') {
+                                    setShowInfo(true);
+                                }
+                            }}
+                            className="flex items-center gap-1.5 px-4 py-1.5 bg-stone-100 text-stone-500 border border-stone-200 rounded-md text-xs font-bold hover:bg-stone-200 hover:text-stone-700 transition-all cursor-pointer w-24 justify-center"
+                            title="Click to Unlock"
+                        >
+                            <Lock size={12} /> LOCKED
                         </button>
+                    ) : (
+                        /* UNLOCKED / RUN STATE */
+                        <div className="flex gap-1">
+                            {/* Optional Re-lock button */}
+                            {(uiRender?.badge_color === 'red' || uiRender?.badge_color === 'yellow') && (
+                                <button
+                                    onClick={() => {
+                                        setIsLocked(true);
+                                        setShowInfo(false);
+                                    }}
+                                    className="p-1.5 text-stone-400 hover:text-stone-600 rounded"
+                                    title="Re-lock"
+                                >
+                                    <Unlock size={14} />
+                                </button>
+                            )}
+
+                            {/* Info Toggle */}
+                            <button
+                                onClick={() => setShowInfo(!showInfo)}
+                                className={`p-1.5 rounded transition-colors ${showInfo ? 'bg-indigo-50 text-indigo-600' : 'text-stone-400 hover:text-stone-600'}`}
+                                title="Show Info"
+                            >
+                                <Info size={14} />
+                            </button>
+
+                            <button
+                                onClick={handleRun}
+                                className={`
+                                    flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-semibold shadow-sm transition-all
+                                    ${uiRender?.badge_color === 'red'
+                                        ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-200'
+                                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                                    }
+                                `}
+                            >
+                                <Play size={12} className="fill-current" />
+                                {uiRender?.badge_color === 'red' ? 'Run Critical' : 'Run'}
+                            </button>
+                        </div>
                     )}
                 </div>
 

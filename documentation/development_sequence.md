@@ -120,3 +120,8 @@ This document tracks the sequence of tasks completed to build the current system
    - **Action**: Added **Data Persistence** for node prompts, outputs, and context overrides.
    - **Action**: Implemented "Reset to Live" and "Settings" override features.
 
+**15. Safety Lock & Impact Analysis (Tier 3.5)**
+   - **Action**: Updated `CommandNodeOutput` schema to strictly separate "Explanation" vs "System Impact".
+   - **Action**: Implemented **Risk Assessment Logic** (SAFE/CAUTION/CRITICAL) in backend.
+   - **Action**: Created **Safety Lock** in Frontend; high-risk commands engage a "Locked" state requiring manual override.
+   - **Action**: Added color-coded badges (Green/Yellow/Red) and warning panels for critical operations.

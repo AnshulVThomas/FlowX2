@@ -119,4 +119,17 @@ To ensure flexibility (allowing users to "simulate" commands for other systems),
     "system_context": { ... } // Optional: Uses node's overridden context
   }
   ```
-- **Response**: Returns a structured `UIResponse` containing the code block, explanation, and a safety rating (SAFE, CAUTION, CRITICAL).
+- **Response**: Returns a structured `UIResponse` containing:
+    - **Code Block**: The executable command.
+    - **Description**: What the command does.
+    - **System Impact**: Side effects (e.g., "Restarts Service").
+    - **Risk Level**: (SAFE, CAUTION, CRITICAL).
+
+#### D. Safety Lock Mechanism
+To prevent accidental execution of destructive commands (e.g., `rm -rf`), a friction-based safety system is implemented:
+1.  **Risk Analysis**: The AI classifies every generated command.
+2.  **Auto-Lock**: If Risk is `CAUTION` or `CRITICAL`, the "Run" button is replaced by a **LOCKED** state.
+3.  **Visual Feedback**:
+    - **Safe (Green)**: Immediate execution allowed.
+    - **Caution (Yellow)**: Shows warning panel; requires unlock.
+    - **Critical (Red)**: Shows "System Impact" alert; requires explicit unlock to access the "Run Critical" button.

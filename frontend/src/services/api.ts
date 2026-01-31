@@ -89,6 +89,8 @@ export interface GenerateCommandResponse {
         code_block: string;
         language: string;
         badge_color: string;
+        description: string;
+        system_effect: string;
     };
     execution_metadata?: {
         requires_sudo: boolean;

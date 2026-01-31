@@ -214,10 +214,12 @@ async def generate_command_endpoint(request: GenerateCommandRequest):
             node_id=request.node_id,
             status="ready",
             ui_render=UIRender(
-                title="Generated Command",
-                code_block=cmd_output.bash_script,
+                title=cmd_output.title,
+                code_block=cmd_output.code_block,
                 language="bash",
-                badge_color=badge_color
+                badge_color=badge_color,
+                description=cmd_output.description,
+                system_effect=cmd_output.system_effect
             ),
             execution_metadata=ExecutionMetadata(
                 requires_sudo=cmd_output.requires_sudo,
