@@ -80,3 +80,42 @@ export const deleteWorkflow = async (id: string) => {
         throw error;
     }
 };
+
+export interface GenerateCommandResponse {
+    node_id: string;
+    status: string;
+    ui_render: {
+        title: string;
+        code_block: string;
+        language: string;
+        badge_color: string;
+    };
+    execution_metadata?: {
+        requires_sudo: boolean;
+        is_interactive: boolean;
+    };
+}
+
+export const generateCommand = async (prompt: string, nodeId: string): Promise<GenerateCommandResponse> => {
+    try {
+        const response = await fetch(`${API_URL}/generate-command`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                prompt,
+                node_id: nodeId,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to generate command');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error generating command:', error);
+        throw error;
+    }
+};

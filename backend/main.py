@@ -5,6 +5,7 @@ from database.connection import db
 from models.workflow import Workflow, WorkflowSummary
 from contextlib import asynccontextmanager
 from typing import List
+from app.schemas.command import GenerateCommandRequest, UIResponse, UIRender, ExecutionMetadata
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -118,12 +119,36 @@ async def get_workflow_details(workflow_id: str):
     document.pop("_id", None)
     return document
 
-@app.delete("/workflows/{workflow_id}")
-async def delete_workflow(workflow_id: str):
-    database = db.get_db()
-    result = await database.workflows.delete_one({"id": workflow_id})
-    
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+@app.post("/generate-command", response_model=UIResponse)
+async def generate_command_endpoint(request: GenerateCommandRequest):
+    try:
+        from app.core.system import get_system_fingerprint
+        from app.services.generator import generate_command
         
-    return {"status": "success", "message": "Workflow deleted"}
+        fingerprint = get_system_fingerprint()
+        cmd_output = generate_command(request.prompt, fingerprint)
+        
+        # Map to UI Contract
+        badge_color = "green"
+        if cmd_output.risk_level == "CAUTION":
+            badge_color = "yellow"
+        elif cmd_output.risk_level == "CRITICAL":
+            badge_color = "red"
+            
+        return UIResponse(
+            node_id=request.node_id,
+            status="ready",
+            ui_render=UIRender(
+                title="Generated Command",
+                code_block=cmd_output.bash_script,
+                language="bash",
+                badge_color=badge_color
+            ),
+            execution_metadata=ExecutionMetadata(
+                requires_sudo=cmd_output.requires_sudo,
+                is_interactive=False 
+            )
+        )
+    except Exception as e:
+        print(f"Generation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
