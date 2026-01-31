@@ -65,3 +65,32 @@ This document tracks the sequence of tasks completed to build the current system
    - **Fixed**: Canvas resize bug by removing `fitView`.
    - Ran `backend/tests/test_workflow_api.py`.
    - Verified Frontend UI indicators and data persistence.
+
+   |
+   |
+   v
+
+**9. Editor & Layout Refactor**
+   - **Action**: Implemented multi-workflow Tabs in `Navbar` with "bleed-in" input for creating/renaming.
+   - **Action**: Refactored `Sidebar` and `Canvas` interaction.
+   - **Action**: Cleaned up Store state (`activeId`, `workflows`, `isCreatingWorkflow`).
+   |
+   |
+   v
+
+**10. Node & Data Management**
+   - **Action**: Implemented **Auto-Save** on node/edge changes and deletions.
+   - **Action**: Supported `Delete` key for removing selected nodes.
+   - **Action**: Added **Dynamic Styling** to `StartNode` (Border/Ring colors based on Idle/Running status).
+   - **Action**: Implemented `activeWorkflow` dirty state tracking for UI feedback.
+   |
+   |
+   v
+
+**11. Performance Optimization**
+   - **Critical Fix**: Resolved Infinite Loop in `Navbar` selector by stabilizing object references.
+   - **Action**: Refactored `useWorkflowStore` to separate data/action selectors.
+   - **Action**: Enabled `onlyRenderVisibleElements` in Canvas for massive drag performance gain.
+   - **Action**: Memoized `StartNode` to prevent re-renders during interactions.
+   - **Action**: Removed `React.StrictMode` in development to reduce double-render overhead.
+

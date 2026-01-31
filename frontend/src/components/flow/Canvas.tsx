@@ -13,10 +13,12 @@ import {
 import { useWorkflowStore } from '../../store/useWorkflowStore';
 import { v4 as uuidv4 } from 'uuid';
 import { StartNode } from '../../nodes/StartNode';
+import { CommandNode } from '../../nodes/CommandNode';
 import '@xyflow/react/dist/style.css';
 
 const nodeTypes = {
     startNode: StartNode,
+    commandNode: CommandNode,
 };
 
 export function Canvas() {
@@ -52,10 +54,13 @@ export function Canvas() {
                 y: event.clientY,
             });
 
-            // Default data for startNode
-            const data = type === 'startNode'
-                ? { name: 'Start Workflow', status: 'idle', label: 'Start Workflow' }
-                : { label: 'Node' };
+            // Default data for nodes
+            let data: any = { label: 'Node' };
+            if (type === 'startNode') {
+                data = { name: 'Start Workflow', status: 'idle', label: 'Start Workflow' };
+            } else if (type === 'commandNode') {
+                data = { command: '', prompt: '' };
+            }
 
             const newNode = {
                 id: uuidv4(),

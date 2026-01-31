@@ -1,5 +1,5 @@
 import { useWorkflowStore } from "../../store/useWorkflowStore";
-import { Play } from "lucide-react";
+import { Play, Sparkles } from "lucide-react";
 
 export function Sidebar() {
     // ⚡️ OPTIMIZED: Check the live 'nodes' array directly.
@@ -35,6 +35,20 @@ export function Sidebar() {
                 <div className="flex flex-col">
                     <span className="text-sm font-medium text-gray-200">Start Node</span>
                     <span className="text-xs text-gray-500">Entry point</span>
+                </div>
+            </div>
+
+            <div
+                className="flex items-center gap-3 p-3 rounded-lg border border-white/10 bg-white/5 cursor-grab hover:bg-white/10 hover:border-white/20 active:cursor-grabbing transition-all"
+                onDragStart={(event) => onDragStart(event, 'commandNode', 'Command')}
+                draggable
+            >
+                <div className="p-2 rounded bg-orange-500/20 text-orange-400">
+                    <Sparkles size={20} />
+                </div>
+                <div className="flex flex-col">
+                    <span className="text-sm font-medium text-gray-200">Command Node</span>
+                    <span className="text-xs text-gray-500">Generate commands</span>
                 </div>
             </div>
         </aside>

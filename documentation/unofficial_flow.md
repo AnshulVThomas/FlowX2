@@ -75,3 +75,22 @@ The application uses a WebSocket connection to monitor server health.
    ```bash
    python tests/test_workflow_api.py
    ```
+
+### 6. Frontend Architecture (State & Efficiency)
+
+The frontend leverages **Zustand** for high-performance state management, optimized for drag-heavy interactions.
+
+- **Global Store (`useWorkflowStore`)**:
+  - Manages the list of workflows (`workflows`) and active editor state (`nodes`, `edges`).
+  - **Optimization**: The `Navbar` subscribes only to the stable `workflows` list references, while the `Canvas` subscribes directly to the Root State (`nodes`, `edges`). This decoupling prevents layout shifts and re-renders during node dragging.
+
+- **Data Persistence Strategy**:
+  - **Local State**: Changes are applied optimistically to the local store for 60fps responsiveness.
+  - **Auto-Save**: Critical actions (Node Deletion, Edge Deletion) trigger immediate background saves.
+  - **Manual Save**: Clicking "Run" or "Save" persists the active workflow state to MongoDB via the `/workflows` endpoint.
+
+- **Performance Features**:
+  - `onlyRenderVisibleElements`: Canvas culling for large graphs.
+  - **Stable Selectors**: Preventing React `useSyncExternalStore` infinite loops.
+  - **Memoization**: Key components like `StartNode` are memoized to resist unrelated updates.
+
