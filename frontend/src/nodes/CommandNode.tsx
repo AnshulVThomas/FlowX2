@@ -46,8 +46,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
 
     const handleRun = () => {
         setIsRunning(true);
-        setIsTerminalOpen(true);
-        setIsExpanded(true); // Auto-expand when running
+        // Removed auto-open/expand
         // Small delay to ensure DOM is ready for Xterm
         setTimeout(() => {
             if (terminalRef.current) {
@@ -136,7 +135,9 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
 
     // --- 4. RENDER ---
     return (
-        <div className={`relative group transition-all duration-300 ease-in-out ${isExpanded ? 'w-[800px] h-[500px] z-50' : 'min-w-[420px] h-auto'}`}>
+        <div
+            className={`relative group transition-all duration-300 ease-in-out nowheel ${isExpanded ? 'w-[800px] h-[500px] z-50' : 'min-w-[420px] h-auto'}`}
+        >
 
             {/* Animated Gradient Background (Generating State) */}
             <div className={`absolute -inset-[3px] rounded-xl overflow-hidden transition-opacity duration-300 ${isLoading ? 'opacity-100' : 'opacity-0'}`}>
