@@ -20,36 +20,35 @@ def generate_command(user_request: str, system_fingerprint: dict) -> CommandNode
         "type": "function",
         "function": {
             "name": "generate_bash",
-            "description": "Generates a Bash command. MUST be non-interactive.",
+            "description": "Generates a Bash command.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "reasoning": { 
-                        "type": "string", 
-                        "description": "Step-by-step logic for why this command was chosen."
-                    },
+                    "reasoning": { "type": "string", "description": "Logic for command choice." },
                     "title": {"type": "string"},
-                    "code_block": {"type": "string"},
+                    # FIX 1: Explicit instruction in the schema description
+                    "code_block": {
+                        "type": "string", 
+                        "description": "The EXACT executable command. MUST start with 'sudo' if root is required."
+                    },
                     "description": {"type": "string"},
                     "risk_level": {"type": "string", "enum": ["SAFE", "CAUTION", "CRITICAL"]},
                     "requires_sudo": {"type": "boolean"},
                     "system_effect": {"type": "string"}
                 },
-                "required": ["reasoning", "title", "code_block", "description", "risk_level"]
+                "required": ["title", "code_block", "description", "risk_level", "requires_sudo"]
             }
         }
     }]
 
-    # OPTIMIZATION 2: CoT System Prompt
-    # We tell the model to "route" correctly by thinking first.
+    # FIX 2: Explicit instruction in System Prompt
     system_prompt = f"""
     You are an Expert Arch Linux Administrator. Target: {system_fingerprint.get('os_distro', 'Linux')}.
     
-    PROTOCOL:
-    1. Analyze the user request.
-    2. Determine the safest Pacman/Systemd command.
-    3. EXPLAIN your reasoning in the 'reasoning' field to activate the correct experts.
-    4. Generate the final JSON.
+    RULES:
+    1. If the action requires root (updates, installs, systemctl), you MUST include 'sudo' at the start of the `code_block`.
+    2. Do NOT assume the user will add it later.
+    3. Non-interactive only (use -y or --noconfirm).
     """
 
     def generate_with_model(model_id):

@@ -72,9 +72,28 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
     }, [uiRender]);
     const [contextString, setContextString] = useState(JSON.stringify(data.system_context || {}, null, 2));
     const [jsonError, setJsonError] = useState('');
-    const [resultStatus, setResultStatus] = useState<'success' | 'error' | null>(null);
+    const [resultStatus, setResultStatus] = useState<'success' | 'error' | null>(() => {
+        // Restore status from last history item if available
+        if (data.history && data.history.length > 0) {
+            const last = data.history[0]; // history is unshifted, so 0 is latest
+            if (last.type === 'executed' && last.status) {
+                return last.status === 'success' ? 'success' : 'error';
+            }
+        }
+        return null;
+    });
 
     const terminalRef = useRef<TerminalRef>(null);
+
+    // --- In Terminal View Rendering ---
+    // Use 'hidden' to remove from layout when closed -> Stops ResizeObserver -> Fixes Drag Lag
+    // We use conditional logic to keep opacity transition if possible, but 'hidden' is required for performance.
+    // If we want transition, we delay hidden? For now, performance first.
+    // Actually, 'invisible' keeps layout (width>0). 'hidden' kills layout (width=0).
+    const terminalVisibilityClass = isTerminalOpen
+        ? 'opacity-100 visible pointer-events-auto flex'
+        : 'opacity-0 invisible pointer-events-none hidden';
+    // 'hidden' prevents xterm initialization on new nodes and resize events on existing ones.
 
     // --- HANDLERS ---
 
@@ -178,8 +197,8 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
         // OPTIMIZATION 2: 'nowheel' allows scrolling inside node without zooming canvas
         <div className={`relative group transition-[width,height,box-shadow,ring-color] duration-300 ease-in-out nowheel ${isExpanded ? 'w-[800px] h-[500px] z-50' : 'min-w-[420px] h-auto'}`}>
 
-            {/* OPTIMIZATION 3: Conditional Rendering. 
-                Only render the heavy gradient div when actually loading. 
+            {/* OPTIMIZATION 3: Conditional Rendering.
+                Only render the heavy gradient div when actually loading.
                 Previously it was just opacity-0 but still eating GPU cycles. */}
             {isLoading && (
                 <div className="absolute -inset-[3px] rounded-xl overflow-hidden pointer-events-none">
@@ -376,7 +395,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                     )}
 
                     {/* Terminal View */}
-                    <div className={`absolute inset-0 bg-[#1e1e1e] z-20 flex flex-col transition-opacity duration-200 ${isTerminalOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}>
+                    <div className={`absolute inset-0 bg-[#1e1e1e] z-20 flex flex-col transition-opacity duration-200 ${terminalVisibilityClass}`}>
                         <div className="h-8 bg-gradient-to-b from-[#2a2a2a] to-[#1e1e1e] border-b border-white/5 flex items-center px-3 gap-2 select-none flex-shrink-0">
                             <div className="flex gap-1.5">
                                 <button onClick={() => { setIsTerminalOpen(false); setIsExpanded(false); }} className="w-2.5 h-2.5 rounded-full bg-[#FF5F56] hover:bg-[#FF5F56]/80 flex items-center justify-center text-transparent hover:text-black/50 text-[8px] font-bold">✕</button>
