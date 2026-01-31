@@ -131,5 +131,5 @@ To prevent accidental execution of destructive commands (e.g., `rm -rf`), a fric
 2.  **Auto-Lock**: If Risk is `CAUTION` or `CRITICAL`, the "Run" button is replaced by a **LOCKED** state.
 3.  **Visual Feedback**:
     - **Safe (Green)**: Immediate execution allowed.
-    - **Caution (Yellow)**: Shows warning panel; requires unlock.
-    - **Critical (Red)**: Shows "System Impact" alert; requires explicit unlock to access the "Run Critical" button.
+    - **Caution (Yellow)**: Auto-reveals risk description in an overlay when unlocked.
+    - **Critical (Red)**: Shows "System Impact" in overlay; requires explicit unlock to access the "Run Critical" button.

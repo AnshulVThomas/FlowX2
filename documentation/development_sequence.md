@@ -125,3 +125,8 @@ This document tracks the sequence of tasks completed to build the current system
    - **Action**: Implemented **Risk Assessment Logic** (SAFE/CAUTION/CRITICAL) in backend.
    - **Action**: Created **Safety Lock** in Frontend; high-risk commands engage a "Locked" state requiring manual override.
    - **Action**: Added color-coded badges (Green/Yellow/Red) and warning panels for critical operations.
+**16. UX Polish & Refinement**
+   - **Action**: Refined `CommandNode` UI: Input field now has better focus states and background styling.
+   - **Action**: Implemented **Info Overlay** for descriptions to prevent layout shifts/resizing.
+   - **Action**: Added **History Status Tracking** (Success/Failure icons) to the history log.
+   - **Action**: Improved Safety Lock UX: Auto-reveals risk description upon unlock.

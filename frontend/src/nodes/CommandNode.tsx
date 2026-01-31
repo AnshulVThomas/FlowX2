@@ -18,6 +18,7 @@ export type CommandNodeData = Node<{
         description: string;
         system_effect: string;
     };
+    history?: Array<{ prompt: string, command: string, timestamp: number, type: 'generated' | 'executed', status?: 'success' | 'failure' | 'pending' }>;
 }>;
 
 // --- OPTIMIZATION 1: Extract Badge Config to static helper (avoids recreation) ---
@@ -36,10 +37,17 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
     const [prompt, setPrompt] = useState(data.prompt || '');
     const [command, setCommand] = useState(data.command || '');
 
-    // History State (Local only, not persisted to DB)
-    const [history, setHistory] = useState<Array<{ prompt: string, command: string, timestamp: number, type: 'generated' | 'executed', status?: 'success' | 'failure' | 'pending' }>>([]);
+    // History State
+    const [history, setHistory] = useState<Array<{ prompt: string, command: string, timestamp: number, type: 'generated' | 'executed', status?: 'success' | 'failure' | 'pending' }>>(data.history || []);
     const [showHistory, setShowHistory] = useState(false);
     const [showInfo, setShowInfo] = useState(false);
+
+    // Helper to persist history (Max 5 items)
+    const updateHistory = (newHistory: typeof history) => {
+        const truncated = newHistory.slice(0, 5);
+        setHistory(truncated);
+        updateNodeData(id, { history: truncated });
+    };
 
     // UI States
     const [isLoading, setIsLoading] = useState(false);
@@ -75,13 +83,14 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
         setIsRunning(true);
 
         // Log to History
-        setHistory(prev => [{
+        const newEntry = {
             prompt: prompt || 'Manual Execution',
             command: command,
             timestamp: Date.now(),
-            type: 'executed',
-            status: 'pending'
-        }, ...prev]);
+            type: 'executed' as const,
+            status: 'pending' as const
+        };
+        updateHistory([newEntry, ...history]);
 
         setTimeout(() => {
             if (terminalRef.current) {
@@ -115,12 +124,13 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
             });
 
             // Add to History
-            setHistory(prev => [{
+            const newEntry = {
                 prompt,
                 command: response.ui_render.code_block,
                 timestamp: Date.now(),
-                type: 'generated'
-            }, ...prev]);
+                type: 'generated' as const
+            };
+            updateHistory([newEntry, ...history]);
 
             toast.success('Command generated');
         } catch (error) {
@@ -391,17 +401,15 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                                     }
 
                                     // Update history status
-                                    setHistory(prev => {
-                                        const newHistory = [...prev];
-                                        const lastPendingIdx = newHistory.findIndex(h => h.type === 'executed' && h.status === 'pending');
-                                        if (lastPendingIdx !== -1) {
-                                            newHistory[lastPendingIdx] = {
-                                                ...newHistory[lastPendingIdx],
-                                                status: code === 0 ? 'success' : 'failure'
-                                            };
-                                        }
-                                        return newHistory;
-                                    });
+                                    const newHistory = [...history];
+                                    const lastPendingIdx = newHistory.findIndex(h => h.type === 'executed' && h.status === 'pending');
+                                    if (lastPendingIdx !== -1) {
+                                        newHistory[lastPendingIdx] = {
+                                            ...newHistory[lastPendingIdx],
+                                            status: code === 0 ? 'success' : 'failure'
+                                        };
+                                        updateHistory(newHistory);
+                                    }
 
                                     setTimeout(() => setResultStatus(null), 3000);
                                 }}
