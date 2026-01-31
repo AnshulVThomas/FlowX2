@@ -6,6 +6,10 @@ from models.workflow import Workflow, WorkflowSummary
 from contextlib import asynccontextmanager
 from typing import List
 from app.schemas.command import GenerateCommandRequest, UIResponse, UIRender, ExecutionMetadata
+from app.core.session_manager import PtySession
+import asyncio
+import json
+import base64
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -58,6 +62,70 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         pass
+
+@app.websocket("/ws/terminal")
+async def websocket_terminal_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    print("WebSocket Terminal Connected")
+    
+    # Create PTY Session (defaults to bash)
+    # TODO: In future, might accept a command via query param or initial message
+    session = PtySession(command="bash")
+    session.start()
+    
+    loop = asyncio.get_event_loop()
+    
+    async def pty_reader():
+        """Reads output from PTY and sends to WebSocket"""
+        try:
+            while session.master_fd:
+                # Use run_in_executor to avoid blocking the event loop
+                data = await loop.run_in_executor(None, session.read, 1024)
+                if not data:
+                    break
+                # Send binary or text. xterm.js likes text/binary. 
+                # We'll send text.
+                await websocket.send_text(data.decode(errors="ignore"))
+        except Exception as e:
+            print(f"PTY Reader Error: {e}")
+            
+    # Start reader task
+    reader_task = asyncio.create_task(pty_reader())
+    
+    try:
+        while True:
+            # Wait for message from frontend (Input or Resize)
+            message_text = await websocket.receive_text()
+            
+            try:
+                # Attempt to parse as JSON (for Protocol Messages like RESIZE)
+                message = json.loads(message_text)
+                
+                if isinstance(message, dict) and message.get("type") == "resize":
+                    cols = message.get("cols", 80)
+                    rows = message.get("rows", 24)
+                    session.resize(rows, cols)
+                    print(f"Resized PTY to {rows}x{cols}")
+                elif isinstance(message, dict) and message.get("type") == "input":
+                    # Structured input
+                    data = message.get("data", "")
+                    session.write(data.encode())
+                else:
+                    # Fallback or unknown JSON
+                    pass
+            except json.JSONDecodeError:
+                # Raw input fallback (if frontend sends raw keystrokes)
+                session.write(message_text.encode())
+                
+    except WebSocketDisconnect:
+        print("Terminal WebSocket Disconnected")
+    except Exception as e:
+        print(f"WebSocket Error: {e}")
+    finally:
+        # Cleanup
+        if reader_task:
+            reader_task.cancel()
+        session.terminate()
 
 @app.get("/")
 async def read_root():

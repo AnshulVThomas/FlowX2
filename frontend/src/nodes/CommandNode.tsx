@@ -3,6 +3,7 @@ import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import { Sparkles, Terminal, Play, Settings, Save, X, RefreshCw } from 'lucide-react';
 import { generateCommand, fetchSystemInfo } from '../services/api';
 import { useWorkflowStore } from '../store/useWorkflowStore';
+import TerminalComponent from '../components/TerminalComponent';
 import { toast } from 'sonner';
 
 export type CommandNodeData = Node<{
@@ -23,6 +24,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
     const [command, setCommand] = useState(data.command || '');
     const [isLoading, setIsLoading] = useState(false);
     const [uiRender, setUiRender] = useState(data.ui_render);
+    const [isTerminalOpen, setIsTerminalOpen] = useState(false);
 
     // System Context State
     const [showSettings, setShowSettings] = useState(false);
@@ -187,11 +189,12 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
 
                         {/* Run Button */}
                         <button
-                            onClick={() => toast.info('Execution coming in Tier 4!')}
+                            onClick={() => setIsTerminalOpen(true)}
                             className="px-2 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 shadow-sm transition-all flex items-center justify-center"
                             title="Run Command"
                         >
                             <Play size={12} className="ml-0.5" />
+                            <span className="ml-1 text-[10px] font-medium">Run</span>
                         </button>
                     </div>
                 )}
@@ -199,25 +202,34 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
 
             {/* Command Output Section */}
             {!showSettings && (
-                <div className="bg-gray-900 text-gray-200 font-mono text-xs flex flex-col relative group">
-                    {/* Window Controls Decoration */}
-                    <div className="absolute top-0 left-0 right-0 h-6 bg-gray-800/50 flex items-center px-2 border-b border-white/5 pointer-events-none z-10">
-                        <div className="flex gap-1.5">
-                            <div className="w-2.5 h-2.5 rounded-full bg-red-500/80" />
-                            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
-                            <div className="w-2.5 h-2.5 rounded-full bg-green-500/80" />
-                        </div>
-                    </div>
+                <>
+                    {isTerminalOpen ? (
+                        <TerminalComponent
+                            initialCommand={command}
+                            onClose={() => setIsTerminalOpen(false)}
+                        />
+                    ) : (
+                        <div className="bg-gray-900 text-gray-200 font-mono text-xs flex flex-col relative group">
+                            {/* Window Controls Decoration */}
+                            <div className="absolute top-0 left-0 right-0 h-6 bg-gray-800/50 flex items-center px-2 border-b border-white/5 pointer-events-none z-10">
+                                <div className="flex gap-1.5">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-red-500/80" />
+                                    <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
+                                    <div className="w-2.5 h-2.5 rounded-full bg-green-500/80" />
+                                </div>
+                            </div>
 
-                    <textarea
-                        value={command}
-                        onChange={(e) => setCommand(e.target.value)}
-                        onBlur={() => updateNodeData(id, { command })}
-                        placeholder="# Waiting for input..."
-                        className="w-full bg-transparent border-none text-gray-300 p-3 pt-8 focus:ring-0 resize-y min-h-[80px] max-h-[300px] leading-relaxed selection:bg-indigo-500/30 outline-none"
-                        spellCheck={false}
-                    />
-                </div>
+                            <textarea
+                                value={command}
+                                onChange={(e) => setCommand(e.target.value)}
+                                onBlur={() => updateNodeData(id, { command })}
+                                placeholder="# Waiting for input..."
+                                className="w-full bg-transparent border-none text-gray-300 p-3 pt-8 focus:ring-0 resize-y min-h-[80px] max-h-[300px] leading-relaxed selection:bg-indigo-500/30 outline-none"
+                                spellCheck={false}
+                            />
+                        </div>
+                    )}
+                </>
             )}
 
             <Handle
