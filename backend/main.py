@@ -227,5 +227,13 @@ async def generate_command_endpoint(request: GenerateCommandRequest):
             )
         )
     except Exception as e:
-        print(f"Generation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_str = str(e)
+        print(f"Generation error: {error_str}")
+        
+        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+            raise HTTPException(
+                status_code=429, 
+                detail="Gemini API Quota Exceeded. Please try again later."
+            )
+            
+        raise HTTPException(status_code=500, detail=error_str)

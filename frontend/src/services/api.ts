@@ -126,7 +126,9 @@ export const generateCommand = async (prompt: string, nodeId: string, systemCont
         });
 
         if (!response.ok) {
-            throw new Error('Failed to generate command');
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData.detail || errorData.error || 'Failed to generate command';
+            throw new Error(errorMessage);
         }
 
         return await response.json();

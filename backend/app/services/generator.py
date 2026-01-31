@@ -28,9 +28,17 @@ def generate_command(user_request: str, system_fingerprint: dict) -> CommandNode
     5. Be concise.
     """
 
-    # We try the cutting-edge model first
-    primary_model = "gemini-3-flash-preview"
-    fallback_model = "gemini-2.5-flash"
+    # Determine Switching Mode
+    flowx_mode = os.environ.get("FLOWX_MODE", "demo").lower()
+    
+    if flowx_mode == "dev":
+        # User requested specific Gemma 3 models
+        primary_model = "gemma-3-27b-it" 
+        fallback_model = "gemma-3-12b-it"
+    else:
+        # Default / Demo mode (Restoring user's previous working models)
+        primary_model = "gemini-3-flash-preview" 
+        fallback_model = "gemini-2.5-flash"
 
     try:
         response = client.models.generate_content(

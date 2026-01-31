@@ -53,109 +53,113 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({ onC
     useEffect(() => {
         if (!terminalRef.current) return;
 
-        // Initialize xterm
-        const term = new Terminal({
-            cursorBlink: true,
-            fontSize: 12,
-            fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-            theme: {
-                background: '#1e1e1e', // Match CommandNode background
-                foreground: '#f3f4f6', // Gray 100
-                cursor: '#6366f1', // Indigo 500
-            },
-            disableStdin: false,
-            convertEol: true,
-            allowProposedApi: true, // Allow OSC codes
-        });
+        let term: Terminal | null = null;
+        let ws: WebSocket | null = null;
+        let fitAddon: FitAddon | null = null;
+        let resizeObserver: ResizeObserver | null = null;
 
-        const fitAddon = new FitAddon();
-        term.loadAddon(fitAddon);
-        term.open(terminalRef.current);
-        fitAddon.fit();
+        const initTerminal = () => {
+            if (term) return; // Already initialized
 
-        xtermRef.current = term;
-        fitAddonRef.current = fitAddon;
+            console.log("Initializing Terminal...");
 
-        // Connect WebSocket
-        const wsUrl = `ws://${window.location.hostname}:8000/ws/terminal`;
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
-        bufferRef.current = "";
+            term = new Terminal({
+                cursorBlink: true,
+                fontSize: 12,
+                fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                theme: {
+                    background: '#1e1e1e',
+                    foreground: '#f3f4f6',
+                    cursor: '#6366f1',
+                },
+                disableStdin: false,
+                convertEol: true,
+                allowProposedApi: true,
+            });
 
-        ws.onopen = () => {
-            setStatus('connected');
-            term.write('\x1b[32m\r\nConnected to PTY Session...\x1b[0m\r\n');
+            fitAddon = new FitAddon();
+            term.loadAddon(fitAddon);
 
-            // Send initial resize
-            const dims = fitAddon.proposeDimensions();
-            if (dims) {
-                ws.send(JSON.stringify({
-                    type: 'resize',
-                    cols: dims.cols,
-                    rows: dims.rows
-                }));
-            }
-        };
-
-        ws.onmessage = (event) => {
-            // Write to terminal immediately (OSC codes are hidden by xterm)
-            term.write(event.data);
-
-            // Sentinel Detection Logic
-            if (onCommandComplete) {
-                const chunk = event.data as string; // WebSocket sends text by default in our backend
-                bufferRef.current += chunk;
-
-                // Limit buffer to prevent leaks (last 1000 chars is plenty for the marker)
-                if (bufferRef.current.length > 1000) {
-                    bufferRef.current = bufferRef.current.slice(-1000);
-                }
-
-                // Check for marker: \x1b]1337;DONE:123\x07
-                const match = bufferRef.current.match(/\x1b]1337;DONE:(\d+)\x07/);
-                if (match) {
-                    const exitCode = parseInt(match[1], 10);
-                    onCommandComplete(exitCode);
-                    bufferRef.current = ""; // Clear buffer after detection
-                }
-            }
-        };
-
-        ws.onclose = () => {
-            setStatus('disconnected');
-            term.write('\r\n\x1b[31mConnection closed.\x1b[0m');
-        };
-
-        ws.onerror = (err) => {
-            console.error('WebSocket error:', err);
-            term.write('\r\n\x1b[31mConnection error.\x1b[0m');
-        };
-
-        // Terminal Input -> WebSocket
-        term.onData((data) => {
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'input',
-                    data: data
-                }));
-            }
-        });
-
-        // Handle resizing via ResizeObserver (Robust for container changes)
-        const resizeObserver = new ResizeObserver(() => {
-            if (terminalRef.current && ws.readyState === WebSocket.OPEN) {
-                // Wait for layout update
-                requestAnimationFrame(() => {
+            // Ensure container is ready
+            if (terminalRef.current) {
+                term.open(terminalRef.current);
+                try {
                     fitAddon.fit();
-                    const dims = fitAddon.proposeDimensions();
-                    if (dims) {
-                        ws.send(JSON.stringify({
-                            type: 'resize',
-                            cols: dims.cols,
-                            rows: dims.rows
-                        }));
+                } catch (e) { console.warn("Initial fit failed", e) }
+            }
+
+            xtermRef.current = term;
+            fitAddonRef.current = fitAddon;
+
+            // Connect WebSocket
+            const wsUrl = `ws://${window.location.hostname}:8000/ws/terminal`;
+            ws = new WebSocket(wsUrl);
+            wsRef.current = ws;
+            bufferRef.current = "";
+
+            ws.onopen = () => {
+                setStatus('connected');
+                term?.write('\x1b[32m\r\nConnected to PTY Session...\x1b[0m\r\n');
+
+                // Initial Resize
+                if (fitAddon) {
+                    try {
+                        const dims = fitAddon.proposeDimensions();
+                        if (dims) {
+                            ws?.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+                        }
+                    } catch (e) {
+                        console.warn(e);
                     }
-                });
+                }
+            };
+
+            ws.onmessage = (event) => {
+                term?.write(event.data);
+
+                if (onCommandComplete) {
+                    const chunk = event.data as string;
+                    bufferRef.current += chunk;
+                    if (bufferRef.current.length > 1000) bufferRef.current = bufferRef.current.slice(-1000);
+                    const match = bufferRef.current.match(/\x1b]1337;DONE:(\d+)\x07/);
+                    if (match) {
+                        const exitCode = parseInt(match[1], 10);
+                        onCommandComplete(exitCode);
+                        bufferRef.current = "";
+                    }
+                }
+            };
+
+            ws.onclose = () => { setStatus('disconnected'); term?.write('\r\n\x1b[31mConnection closed.\x1b[0m'); };
+            ws.onerror = (err) => { console.error('WebSocket error:', err); term?.write('\r\n\x1b[31mConnection error.\x1b[0m'); };
+
+            term.onData((data) => {
+                if (ws?.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'input', data: data }));
+                }
+            });
+        };
+
+        // Observe for visibility/size
+        resizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+                    if (!term) {
+                        // First time visible: Initialize
+                        requestAnimationFrame(initTerminal);
+                    } else if (fitAddon && ws?.readyState === WebSocket.OPEN) {
+                        // Subsequent resizes
+                        requestAnimationFrame(() => {
+                            try {
+                                fitAddon?.fit();
+                                const dims = fitAddon?.proposeDimensions();
+                                if (dims) {
+                                    ws?.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+                                }
+                            } catch (e) { console.warn("Resize fit error", e); }
+                        });
+                    }
+                }
             }
         });
 
@@ -163,13 +167,12 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({ onC
             resizeObserver.observe(terminalRef.current);
         }
 
-        // Cleanup
         return () => {
-            resizeObserver.disconnect();
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.close();
-            }
-            term.dispose();
+            resizeObserver?.disconnect();
+            if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+            term?.dispose();
+            wsRef.current = null;
+            xtermRef.current = null;
         };
     }, []);
 
