@@ -92,5 +92,31 @@ The frontend leverages **Zustand** for high-performance state management, optimi
 - **Performance Features**:
   - `onlyRenderVisibleElements`: Canvas culling for large graphs.
   - **Stable Selectors**: Preventing React `useSyncExternalStore` infinite loops.
-  - **Memoization**: Key components like `StartNode` are memoized to resist unrelated updates.
+   - **Memoization**: Key components like `StartNode` are memoized to resist unrelated updates.
+   
+### 7. AI & System Context Architecture
 
+The project now includes an intelligence layer powered by Gemini to generate bash commands based on the user's system context.
+
+#### A. System Fingerprinting
+- **Module**: `backend/app/core/system.py`
+- **Function**: Automatically detects the host's OS (e.g., Arch Linux), Kernel version, Shell (e.g., /bin/zsh), and Hardware specs.
+- **Privacy**: This runs locally on the backend start.
+
+#### B. Context Propagation (Global -> Store -> Local)
+To ensure flexibility (allowing users to "simulate" commands for other systems), we implemented a specific data flow:
+1.  **Global Load**: On `Canvas` mount, the app fetches `/system-info` and stores it in the **Global Zustand Store**.
+2.  **Node Creation**: When a `CommandNode` is dropped, the `Canvas` deeply clones (`structuredClone`) the global context into the new node's local `data`.
+3.  **Local Override**: The user can edit the JSON context within the Node's settings. This affects *only* that specific node.
+4.  **Reset**: A "Reset to Live" button re-fetches the host info to overwrite the node's local context.
+
+#### C. Intelligence API
+- **Endpoint**: `POST /generate-command`
+- **Payload**:
+  ```json
+  {
+    "prompt": "Install Docker",
+    "system_context": { ... } // Optional: Uses node's overridden context
+  }
+  ```
+- **Response**: Returns a structured `UIResponse` containing the code block, explanation, and a safety rating (SAFE, CAUTION, CRITICAL).

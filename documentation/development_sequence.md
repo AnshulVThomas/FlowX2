@@ -93,4 +93,30 @@ This document tracks the sequence of tasks completed to build the current system
    - **Action**: Enabled `onlyRenderVisibleElements` in Canvas for massive drag performance gain.
    - **Action**: Memoized `StartNode` to prevent re-renders during interactions.
    - **Action**: Removed `React.StrictMode` in development to reduce double-render overhead.
+   |
+   |
+   v
+
+**12. System Context Module (Tier 1)**
+   - **Action**: Created `backend/app/core/system.py` to auto-detect OS info (Distro, Kernel, Shell, Hardware).
+   - **Action**: Exposed `GET /system-info` endpoint in `backend/main.py`.
+   - **Action**: Verified JSON output match against host environment.
+   |
+   |
+   v
+
+**13. Intelligence Layer (Tier 2)**
+   - **Action**: Structured backend into `app/core`, `app/services`, and `app/schemas`.
+   - **Action**: Implemented Gemini integration in `app/services/generator.py`.
+   - **Action**: Defined strict `UIResponse` contract in `app/schemas/command.py` for frontend rendering.
+   |
+   |
+   v
+
+**14. Presentation Layer & Command Node (Tier 3)**
+   - **Action**: Created `CommandNode.tsx` with inputs, settings, and output display.
+   - **Architecture**: Implemented **Global Fetch -> Store -> Local Clone** pattern for System Context.
+   - **Action**: Integrated `fetchSystemInfo` and `generateCommand` APIs.
+   - **Action**: Added **Data Persistence** for node prompts, outputs, and context overrides.
+   - **Action**: Implemented "Reset to Live" and "Settings" override features.
 
