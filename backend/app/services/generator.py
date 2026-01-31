@@ -29,7 +29,7 @@ def generate_command(user_request: str, system_fingerprint: dict) -> CommandNode
                     # FIX 1: Explicit instruction in the schema description
                     "code_block": {
                         "type": "string", 
-                        "description": "The EXACT executable command. MUST start with 'sudo' if root is required."
+                        "description": "The EXACT executable command."
                     },
                     "description": {"type": "string"},
                     "risk_level": {"type": "string", "enum": ["SAFE", "CAUTION", "CRITICAL"]},
@@ -48,7 +48,10 @@ def generate_command(user_request: str, system_fingerprint: dict) -> CommandNode
     RULES:
     1. If the action requires root (updates, installs, systemctl), you MUST include 'sudo' at the start of the `code_block`.
     2. Do NOT assume the user will add it later.
-    3. Non-interactive only (use -y or --noconfirm).
+    3. Do NOT use 'sudo' for operations inside the user's home directory (~/) or read-only checks.
+    4. Non-interactive only (use -y or --noconfirm).
+    5. EXPLAIN your reasoning in the 'reasoning' field to activate the correct experts.
+    6. Generate the final JSON.
     """
 
     def generate_with_model(model_id):
