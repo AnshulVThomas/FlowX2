@@ -78,6 +78,7 @@ export function Canvas() {
                 data = {
                     command: '',
                     prompt: '',
+                    history: [],
                     system_context: systemContext ? structuredClone(systemContext) : {}
                 };
             }

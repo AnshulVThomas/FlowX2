@@ -30,11 +30,38 @@ const getBadgeConfig = (color?: string) => {
     }
 };
 
+// --- OPTIMIZATION 2: Isolated Command Editor to prevent full node re-renders on typing ---
+const CommandEditor = memo(({
+    initialValue,
+    onUpdate
+}: {
+    initialValue: string,
+    onUpdate: (val: string) => void
+}) => {
+    const [value, setValue] = useState(initialValue);
+
+    // Sync if external props change significantly
+    useEffect(() => setValue(initialValue), [initialValue]);
+
+    return (
+        <textarea
+            className="nodrag w-full h-full bg-[#1e1e1e] text-gray-300 font-mono text-[11px] leading-relaxed p-4 pt-4 border-none focus:ring-0 resize-none outline-none scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent flex-grow"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onBlur={() => onUpdate(value)}
+            placeholder="# Generated command..."
+            spellCheck={false}
+        />
+    );
+});
+
+// --- MAIN COMPONENT ---
 const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>) => {
     const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
 
     // Local State
     const [prompt, setPrompt] = useState(data.prompt || '');
+    // Remove local command state that syncs on every keystroke
     const [command, setCommand] = useState(data.command || '');
 
     // History State
@@ -85,16 +112,6 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
 
     const terminalRef = useRef<TerminalRef>(null);
 
-    // --- In Terminal View Rendering ---
-    // Use 'hidden' to remove from layout when closed -> Stops ResizeObserver -> Fixes Drag Lag
-    // We use conditional logic to keep opacity transition if possible, but 'hidden' is required for performance.
-    // If we want transition, we delay hidden? For now, performance first.
-    // Actually, 'invisible' keeps layout (width>0). 'hidden' kills layout (width=0).
-    const terminalVisibilityClass = isTerminalOpen
-        ? 'opacity-100 visible pointer-events-auto flex'
-        : 'opacity-0 invisible pointer-events-none hidden';
-    // 'hidden' prevents xterm initialization on new nodes and resize events on existing ones.
-
     // --- HANDLERS ---
 
     // Memoize handlers to prevent prop thrashing
@@ -116,7 +133,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                 terminalRef.current.runCommand(command);
             }
         }, 100);
-    }, [command, prompt]); // Depends on current command and prompt
+    }, [command, prompt, history]); // Depends on current command and prompt
 
     const handleStop = useCallback(() => {
         setIsRunning(false);
@@ -125,6 +142,11 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
             toast.info('Interrupt signal sent');
         }
     }, []);
+
+    const handleCommandUpdate = useCallback((newCmd: string) => {
+        setCommand(newCmd);
+        updateNodeData(id, { command: newCmd });
+    }, [id, updateNodeData]);
 
     const handleGenerate = async () => {
         if (!prompt) return;
@@ -172,6 +194,11 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
         }
     };
 
+    const handleTerminalClose = useCallback(() => {
+        setIsTerminalOpen(false);
+        setIsExpanded(false);
+    }, []);
+
     // --- STYLES ---
     const badge = getBadgeConfig(uiRender?.badge_color);
     const BadgeIcon = badge.icon;
@@ -179,23 +206,33 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
     let ringClass = "ring-1 ring-stone-200";
     let shadowClass = "shadow-lg shadow-stone-200/50";
 
-    if (resultStatus === 'success') {
+    if (selected) {
+        // Priority 1: Selection (Blue) - Overrides everything as requested
+        ringClass = "ring-2 ring-blue-500";
+        shadowClass = "shadow-xl shadow-blue-500/30";
+    } else if (isRunning) {
+        // Priority 2: Running (Pulse Indigo)
+        ringClass = "ring-2 ring-indigo-500 animate-pulse";
+        shadowClass = "shadow-xl shadow-indigo-500/30";
+    } else if (resultStatus === 'success') {
+        // Priority 3: Success (Green)
         ringClass = "ring-2 ring-emerald-500";
         shadowClass = "shadow-xl shadow-emerald-500/20";
     } else if (resultStatus === 'error') {
+        // Priority 4: Error (Red)
         ringClass = "ring-2 ring-rose-500";
         shadowClass = "shadow-xl shadow-rose-500/20";
-    } else if (isRunning) {
-        ringClass = "ring-2 ring-indigo-500 animate-pulse";
-        shadowClass = "shadow-xl shadow-indigo-500/30";
-    } else if (selected) {
-        ringClass = "ring-2 ring-blue-500";
-        shadowClass = "shadow-xl shadow-blue-500/30";
     }
 
+    // Optimization: 'visible' + 'invisible' + pointer events + z-index
+    // Keeps Xterm "warm" but hidden from view/clicks
+    const terminalVisibilityClass = isTerminalOpen
+        ? 'opacity-100 visible pointer-events-auto z-20'
+        : 'opacity-0 invisible pointer-events-none -z-10';
+
     return (
-        // OPTIMIZATION 2: 'nowheel' allows scrolling inside node without zooming canvas
-        <div className={`relative group transition-[width,height,box-shadow,ring-color] duration-300 ease-in-out nowheel ${isExpanded ? 'w-[800px] h-[500px] z-50' : 'min-w-[420px] h-auto'}`}>
+        // OPTIMIZATION 4: Hardware Acceleration hint
+        <div className={`relative group transition-[width,height,box-shadow,ring-color] duration-300 ease-in-out nowheel will-change-[width,height] ${isExpanded ? 'w-[800px] h-[500px] z-50' : 'min-w-[420px] h-auto'}`}>
 
             {/* OPTIMIZATION 3: Conditional Rendering.
                 Only render the heavy gradient div when actually loading.
@@ -398,7 +435,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                     <div className={`absolute inset-0 bg-[#1e1e1e] z-20 flex flex-col transition-opacity duration-200 ${terminalVisibilityClass}`}>
                         <div className="h-8 bg-gradient-to-b from-[#2a2a2a] to-[#1e1e1e] border-b border-white/5 flex items-center px-3 gap-2 select-none flex-shrink-0">
                             <div className="flex gap-1.5">
-                                <button onClick={() => { setIsTerminalOpen(false); setIsExpanded(false); }} className="w-2.5 h-2.5 rounded-full bg-[#FF5F56] hover:bg-[#FF5F56]/80 flex items-center justify-center text-transparent hover:text-black/50 text-[8px] font-bold">✕</button>
+                                <button onClick={handleTerminalClose} className="w-2.5 h-2.5 rounded-full bg-[#FF5F56] hover:bg-[#FF5F56]/80 flex items-center justify-center text-transparent hover:text-black/50 text-[8px] font-bold">✕</button>
                                 <div className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]" />
                                 <button onClick={() => setIsExpanded(!isExpanded)} className="w-2.5 h-2.5 rounded-full bg-[#27C93F] hover:bg-[#27C93F]/80 flex items-center justify-center text-transparent hover:text-black/50 text-[6px] font-bold">{isExpanded ? <Minimize2 size={6} /> : <Maximize2 size={6} />}</button>
                             </div>
@@ -408,7 +445,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                             <TerminalComponent
                                 ref={terminalRef}
                                 hideToolbar={true}
-                                onClose={() => setIsTerminalOpen(false)}
+                                onClose={handleTerminalClose}
                                 onCommandComplete={(code) => {
                                     setIsRunning(false);
                                     if (code === 0) {
@@ -448,13 +485,9 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                             </div>
 
                             {/* OPTIMIZATION 4: 'nodrag' is critical here */}
-                            <textarea
-                                className="nodrag w-full h-full bg-[#1e1e1e] text-gray-300 font-mono text-[11px] leading-relaxed p-4 pt-4 border-none focus:ring-0 resize-none outline-none scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent flex-grow"
-                                value={command}
-                                onChange={(e) => setCommand(e.target.value)}
-                                onBlur={() => updateNodeData(id, { command })}
-                                placeholder="# Generated command..."
-                                spellCheck={false}
+                            <CommandEditor
+                                initialValue={command}
+                                onUpdate={handleCommandUpdate}
                             />
                         </div>
                     </div>
@@ -544,5 +577,21 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
     );
 };
 
-// OPTIMIZATION 5: Strict Memoization
-export const CommandNode = memo(CommandNodeComponent);
+// --- OPTIMIZATION 1: Custom Compare Function ---
+function propsAreEqual(prev: NodeProps<CommandNodeData>, next: NodeProps<CommandNodeData>) {
+    return (
+        prev.selected === next.selected &&
+        prev.id === next.id &&
+        prev.dragging === next.dragging && // Import optimization
+        // Deep compare specific data fields
+        prev.data.command === next.data.command &&
+        prev.data.prompt === next.data.prompt &&
+        prev.data.ui_render?.badge_color === next.data.ui_render?.badge_color &&
+        prev.data.ui_render?.code_block === next.data.ui_render?.code_block &&
+        // Shallow check for history array itself (store updates create new array refs)
+        prev.data.history === next.data.history
+    );
+}
+
+// OPTIMIZATION 5: Strict Memoization with Custom Comparator
+export const CommandNode = memo(CommandNodeComponent, propsAreEqual);
