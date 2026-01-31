@@ -14,6 +14,8 @@ import { useWorkflowStore } from '../../store/useWorkflowStore';
 import { v4 as uuidv4 } from 'uuid';
 import { StartNode } from '../../nodes/StartNode';
 import { CommandNode } from '../../nodes/CommandNode';
+import { fetchSystemInfo } from '../../services/api';
+import { useEffect } from 'react';
 import '@xyflow/react/dist/style.css';
 
 const nodeTypes = {
@@ -33,6 +35,16 @@ export function Canvas() {
     const onEdgesChange = useWorkflowStore((state) => state.onEdgesChange);
     const onConnect = useWorkflowStore((state) => state.onConnect);
     const addNode = useWorkflowStore((state) => state.addNode);
+
+    // Initial system info fetch
+    const systemInfoRef = useRef<any>(null);
+
+    useEffect(() => {
+        fetchSystemInfo().then((info: any) => {
+            systemInfoRef.current = info;
+            console.log("System info loaded:", info);
+        }).catch((err: any) => console.error("Failed to load system info", err));
+    }, []);
 
     const onDragOver = useCallback((event: React.DragEvent) => {
         event.preventDefault();
@@ -59,7 +71,13 @@ export function Canvas() {
             if (type === 'startNode') {
                 data = { name: 'Start Workflow', status: 'idle', label: 'Start Workflow' };
             } else if (type === 'commandNode') {
-                data = { command: '', prompt: '' };
+                // INJECT SYSTEM INFO HERE
+                console.log("Injecting system context:", systemInfoRef.current);
+                data = {
+                    command: '',
+                    prompt: '',
+                    system_context: systemInfoRef.current
+                };
             }
 
             const newNode = {

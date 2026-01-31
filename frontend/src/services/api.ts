@@ -96,7 +96,20 @@ export interface GenerateCommandResponse {
     };
 }
 
-export const generateCommand = async (prompt: string, nodeId: string): Promise<GenerateCommandResponse> => {
+export const fetchSystemInfo = async () => {
+    try {
+        const response = await fetch(`${API_URL}/system-info`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch system info');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching system info:', error);
+        throw error;
+    }
+};
+
+export const generateCommand = async (prompt: string, nodeId: string, systemContext?: any): Promise<GenerateCommandResponse> => {
     try {
         const response = await fetch(`${API_URL}/generate-command`, {
             method: 'POST',
@@ -106,6 +119,7 @@ export const generateCommand = async (prompt: string, nodeId: string): Promise<G
             body: JSON.stringify({
                 prompt,
                 node_id: nodeId,
+                system_context: systemContext
             }),
         });
 

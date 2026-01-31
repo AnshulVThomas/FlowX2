@@ -16,6 +16,7 @@ class CommandNodeOutput(BaseModel):
 class GenerateCommandRequest(BaseModel):
     prompt: str
     node_id: str
+    system_context: dict | None = None
 
 class UIRender(BaseModel):
     title: str

@@ -119,13 +119,20 @@ async def get_workflow_details(workflow_id: str):
     document.pop("_id", None)
     return document
 
+@app.get("/system-info")
+async def get_system_info():
+    from app.core.system import get_system_fingerprint
+    return get_system_fingerprint()
+
 @app.post("/generate-command", response_model=UIResponse)
 async def generate_command_endpoint(request: GenerateCommandRequest):
     try:
         from app.core.system import get_system_fingerprint
         from app.services.generator import generate_command
         
-        fingerprint = get_system_fingerprint()
+        # Use provided context or fall back to live detection
+        fingerprint = request.system_context if request.system_context else get_system_fingerprint()
+        
         cmd_output = generate_command(request.prompt, fingerprint)
         
         # Map to UI Contract
