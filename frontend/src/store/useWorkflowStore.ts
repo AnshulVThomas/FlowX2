@@ -44,6 +44,10 @@ interface WorkflowState {
     // Saving & State
     saveActiveWorkflow: () => Promise<void>;
     markClean: (id?: string) => void; // <--- Re-added for compatibility
+
+    // System Context
+    systemContext: any | null;
+    setSystemContext: (context: any) => void;
 }
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
@@ -53,6 +57,9 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     nodes: [],
     edges: [],
     isDirty: false,
+    systemContext: null,
+
+    setSystemContext: (context) => set({ systemContext: context }),
 
     startWorkflowCreation: () => set({ isCreatingWorkflow: true }),
     cancelWorkflowCreation: () => set({ isCreatingWorkflow: false }),

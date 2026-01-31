@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import {
     ReactFlow,
     MiniMap,
@@ -35,16 +35,18 @@ export function Canvas() {
     const onEdgesChange = useWorkflowStore((state) => state.onEdgesChange);
     const onConnect = useWorkflowStore((state) => state.onConnect);
     const addNode = useWorkflowStore((state) => state.addNode);
-
-    // Initial system info fetch
-    const systemInfoRef = useRef<any>(null);
+    const setSystemContext = useWorkflowStore((state) => state.setSystemContext);
+    const systemContext = useWorkflowStore((state) => state.systemContext);
 
     useEffect(() => {
-        fetchSystemInfo().then((info: any) => {
-            systemInfoRef.current = info;
-            console.log("System info loaded:", info);
-        }).catch((err: any) => console.error("Failed to load system info", err));
-    }, []);
+        // Only fetch if we haven't already (or force it if needed, but on app load once is fine)
+        if (!systemContext) {
+            fetchSystemInfo().then((info: any) => {
+                setSystemContext(info);
+                console.log("System info loaded into Store:", info);
+            }).catch((err: any) => console.error("Failed to load system info", err));
+        }
+    }, [systemContext, setSystemContext]);
 
     const onDragOver = useCallback((event: React.DragEvent) => {
         event.preventDefault();
@@ -71,12 +73,12 @@ export function Canvas() {
             if (type === 'startNode') {
                 data = { name: 'Start Workflow', status: 'idle', label: 'Start Workflow' };
             } else if (type === 'commandNode') {
-                // INJECT SYSTEM INFO HERE
-                console.log("Injecting system context:", systemInfoRef.current);
+                // INJECT SYSTEM INFO HERE (DEEP COPY from Store)
+                console.log("Injecting system context from Store:", systemContext);
                 data = {
                     command: '',
                     prompt: '',
-                    system_context: systemInfoRef.current
+                    system_context: systemContext ? structuredClone(systemContext) : {}
                 };
             }
 
