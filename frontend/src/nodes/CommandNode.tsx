@@ -2,6 +2,7 @@ import { memo, useState } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import { Sparkles, Terminal, Play, Settings, Save, X, RefreshCw } from 'lucide-react';
 import { generateCommand, fetchSystemInfo } from '../services/api';
+import { useWorkflowStore } from '../store/useWorkflowStore';
 import { toast } from 'sonner';
 
 export type CommandNodeData = Node<{
@@ -17,6 +18,7 @@ export type CommandNodeData = Node<{
 }>;
 
 const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>) => {
+    const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
     const [prompt, setPrompt] = useState(data.prompt || '');
     const [command, setCommand] = useState(data.command || '');
     const [isLoading, setIsLoading] = useState(false);
@@ -39,6 +41,13 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
             setUiRender(response.ui_render);
             setCommand(response.ui_render.code_block);
 
+            // Sync with Global Store (and Database)
+            updateNodeData(id, {
+                prompt: prompt, // Ensure prompt is also saved
+                command: response.ui_render.code_block,
+                ui_render: response.ui_render
+            });
+
             toast.success('Command generated successfully');
         } catch (error) {
             console.error(error);
@@ -53,7 +62,10 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
             const parsed = JSON.parse(contextString);
             setLocalSystemContext(parsed);
             setJsonError('');
+            setLocalSystemContext(parsed);
+            setJsonError('');
             setShowSettings(false);
+            updateNodeData(id, { system_context: parsed });
             toast.success('System context updated');
         } catch (e) {
             setJsonError('Invalid JSON format');
@@ -120,6 +132,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                                         const info = await fetchSystemInfo();
                                         setLocalSystemContext(info);
                                         setContextString(JSON.stringify(info, null, 2));
+                                        updateNodeData(id, { system_context: info });
                                         toast.success('System info refreshed');
                                     } catch (e) {
                                         toast.error('Failed to refresh system info');
@@ -151,6 +164,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                             type="text"
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
+                            onBlur={() => updateNodeData(id, { prompt })}
                             placeholder="e.g., Install Docker on Arch"
                             className="flex-grow px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 transition-all"
                             onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
@@ -198,6 +212,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                     <textarea
                         value={command}
                         onChange={(e) => setCommand(e.target.value)}
+                        onBlur={() => updateNodeData(id, { command })}
                         placeholder="# Waiting for input..."
                         className="w-full bg-transparent border-none text-gray-300 p-3 pt-8 focus:ring-0 resize-y min-h-[80px] max-h-[300px] leading-relaxed selection:bg-indigo-500/30 outline-none"
                         spellCheck={false}

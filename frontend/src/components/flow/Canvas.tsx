@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
     ReactFlow,
     MiniMap,
@@ -15,7 +15,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { StartNode } from '../../nodes/StartNode';
 import { CommandNode } from '../../nodes/CommandNode';
 import { fetchSystemInfo } from '../../services/api';
-import { useEffect } from 'react';
+
 import '@xyflow/react/dist/style.css';
 
 const nodeTypes = {
@@ -93,7 +93,7 @@ export function Canvas() {
 
             addNode(newNode);
         },
-        [screenToFlowPosition, addNode],
+        [screenToFlowPosition, addNode, systemContext],
     );
 
     return (
