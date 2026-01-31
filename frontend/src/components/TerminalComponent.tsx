@@ -1,20 +1,53 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 import { X } from 'lucide-react';
 
-interface TerminalComponentProps {
-    initialCommand?: string;
-    onClose: () => void;
+export interface TerminalRef {
+    runCommand: (cmd: string) => void;
+    stop: () => void;
 }
 
-const TerminalComponent: React.FC<TerminalComponentProps> = ({ initialCommand, onClose }) => {
+interface TerminalComponentProps {
+    onClose: () => void;
+    onCommandComplete?: (exitCode: number) => void;
+}
+
+const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({ onClose, onCommandComplete }, ref) => {
     const terminalRef = useRef<HTMLDivElement>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const xtermRef = useRef<Terminal | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
     const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+    const bufferRef = useRef(""); // Rolling buffer for fragmentation
+
+    // Expose methods to parent
+    useImperativeHandle(ref, () => ({
+        runCommand: (cmd: string) => {
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                // Robust Command Construction:
+                // 1. \n handles single-line comments (#) and ensures we start a new command
+                // 2. printf sends the OSC code with the exit status ($?)
+                const sentinel = `\nprintf "\\x1b]1337;DONE:%d\\x07" $?\r`;
+                const fullCommand = cmd + sentinel;
+
+                wsRef.current.send(JSON.stringify({
+                    type: 'input',
+                    data: fullCommand
+                }));
+            }
+        },
+        stop: () => {
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                // Send Ctrl+C
+                wsRef.current.send(JSON.stringify({
+                    type: 'input',
+                    data: '\x03'
+                }));
+            }
+        }
+    }));
 
     useEffect(() => {
         if (!terminalRef.current) return;
@@ -31,6 +64,7 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ initialCommand, o
             },
             disableStdin: false,
             convertEol: true,
+            allowProposedApi: true, // Allow OSC codes
         });
 
         const fitAddon = new FitAddon();
@@ -45,6 +79,7 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ initialCommand, o
         const wsUrl = `ws://${window.location.hostname}:8000/ws/terminal`;
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
+        bufferRef.current = "";
 
         ws.onopen = () => {
             setStatus('connected');
@@ -59,23 +94,30 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ initialCommand, o
                     rows: dims.rows
                 }));
             }
-
-            // Auto-run command if provided
-            if (initialCommand) {
-                // Add a small delay/newline to ensure it runs nicely
-                setTimeout(() => {
-                    // Send as structured input or just write it
-                    // Sending as 'input' type to match our backend protocol
-                    ws.send(JSON.stringify({
-                        type: 'input',
-                        data: initialCommand + '\r'
-                    }));
-                }, 500);
-            }
         };
 
         ws.onmessage = (event) => {
+            // Write to terminal immediately (OSC codes are hidden by xterm)
             term.write(event.data);
+
+            // Sentinel Detection Logic
+            if (onCommandComplete) {
+                const chunk = event.data as string; // WebSocket sends text by default in our backend
+                bufferRef.current += chunk;
+
+                // Limit buffer to prevent leaks (last 1000 chars is plenty for the marker)
+                if (bufferRef.current.length > 1000) {
+                    bufferRef.current = bufferRef.current.slice(-1000);
+                }
+
+                // Check for marker: \x1b]1337;DONE:123\x07
+                const match = bufferRef.current.match(/\x1b]1337;DONE:(\d+)\x07/);
+                if (match) {
+                    const exitCode = parseInt(match[1], 10);
+                    onCommandComplete(exitCode);
+                    bufferRef.current = ""; // Clear buffer after detection
+                }
+            }
         };
 
         ws.onclose = () => {
@@ -121,9 +163,7 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ initialCommand, o
             }
             term.dispose();
         };
-    }, []); // Empty dependency array, but we use refs for latest values if needed. 
-    // Usually safe for terminal init. If initialCommand changes, we might want to re-run, but 
-    // standard terminal lifecycle suggests unmount/remount for new session usually.
+    }, []);
 
     return (
         <div className="flex flex-col h-full w-full bg-gray-900 rounded-b-md overflow-hidden relative">
@@ -138,6 +178,7 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ initialCommand, o
                 <button
                     onClick={onClose}
                     className="text-gray-400 hover:text-white transition-colors"
+                    title="Hide Terminal"
                 >
                     <X size={14} />
                 </button>
@@ -147,6 +188,8 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ initialCommand, o
             <div ref={terminalRef} className="flex-1 w-full h-full" style={{ minHeight: '300px' }} />
         </div>
     );
-};
+});
+
+TerminalComponent.displayName = 'TerminalComponent';
 
 export default TerminalComponent;

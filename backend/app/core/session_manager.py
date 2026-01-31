@@ -34,12 +34,19 @@ class PtySession:
                 pass
 
         # 3. Spawn the process
+        # 3. Spawn the process with Shell Hook for state tracking
+        # We use PROMPT_COMMAND to print a hidden OSC code with the exit status ($?)
+        # after every command. Use /bin/bash directly to ensure hook works.
+        env = os.environ.copy()
+        env["PROMPT_COMMAND"] = r'printf "\033]1337;DONE:%s\007" "$?"'
+
         self.process = subprocess.Popen(
-            [shell, "-c", self.command],
+            ["/bin/bash"],
             stdin=slave_fd,
             stdout=slave_fd,
             stderr=slave_fd,
-            preexec_fn=set_ctty, # <--- Updated to use our helper
+            preexec_fn=set_ctty, 
+            env=env,
             close_fds=True
         )
         
