@@ -5,7 +5,6 @@ import struct
 import fcntl
 import termios
 import signal
-import asyncio
 
 class PtySession:
     def __init__(self, command: str):
@@ -14,22 +13,33 @@ class PtySession:
         self.process = None
 
     def start(self):
-        """Spawns the process attached to a new PTY."""
+        """Spawns the process attached to a new PTY with proper Job Control."""
         # 1. Create the PTY pair
         self.master_fd, slave_fd = pty.openpty()
 
         # 2. Determine the shell (defaults to bash)
-        # Note: We are executing the specific command passed, not just an empty shell
         shell = os.environ.get("SHELL", "/bin/bash")
 
+        # --- THE FIX: Helper to set Controlling Terminal (CTTY) ---
+        def set_ctty():
+            # A. Create a new session (detach from parent terminal)
+            os.setsid() 
+            
+            # B. Explicitly set this PTY as the controlling terminal for the child
+            #    '0' refers to stdin, which is now the slave PTY
+            #    This satisfies bash's need for a "real" terminal
+            try:
+                fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+            except Exception:
+                pass
+
         # 3. Spawn the process
-        # We run inside the shell to inherit aliases and env vars
         self.process = subprocess.Popen(
             [shell, "-c", self.command],
             stdin=slave_fd,
             stdout=slave_fd,
             stderr=slave_fd,
-            preexec_fn=os.setsid, # Create a new session ID
+            preexec_fn=set_ctty, # <--- Updated to use our helper
             close_fds=True
         )
         
@@ -40,7 +50,10 @@ class PtySession:
     def write(self, data: bytes):
         """Writes user input (keystrokes) to the PTY."""
         if self.master_fd:
-            os.write(self.master_fd, data)
+            try:
+                os.write(self.master_fd, data)
+            except OSError:
+                pass
 
     def read(self, size=1024) -> bytes:
         """Reads output from the PTY."""
