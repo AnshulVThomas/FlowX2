@@ -12,29 +12,74 @@ export type StartNodeData = Node<{
 // 1. Define the component
 const StartNodeComponent = ({ data, selected }: NodeProps<StartNodeData>) => {
     // 2. Select ONLY the action needed. 
-    // Do not destructure the whole store, or it will re-render on every mouse move.
     const saveActiveWorkflow = useWorkflowStore((state) => state.saveActiveWorkflow);
 
     const handleRun = async (e: React.MouseEvent) => {
         e.stopPropagation(); // Stop the click from selecting the node
 
         try {
-            // 3. Use the store action that grabs the LIVE nodes/edges from the root state
             await saveActiveWorkflow();
             toast.success('Workflow saved and run started');
-
-            // Here you would trigger the actual execution logic
-            // e.g. executeWorkflow(activeId)
         } catch (error) {
             toast.error('Failed to save workflow');
         }
     };
 
+    // Helper to determine styles based on status
+    const getStatusStyles = (status: string | undefined, isSelected: boolean) => {
+        const s = (status || 'idle').toLowerCase();
+
+        // Base styles
+        let borderClass = 'border-stone-200';
+        let ringClass = '';
+        let textClass = 'text-gray-400';
+        let bgClass = 'bg-white';
+
+        switch (s) {
+            case 'running':
+                borderClass = 'border-blue-400';
+                ringClass = 'ring-4 ring-blue-500/20'; // Prominent ring for running
+                textClass = 'text-blue-500';
+                break;
+            case 'completed':
+                borderClass = 'border-green-500';
+                textClass = 'text-green-500';
+                break;
+            case 'failed':
+                borderClass = 'border-red-500';
+                textClass = 'text-red-500';
+                break;
+            default: // idle
+                if (isSelected) {
+                    borderClass = 'border-blue-500';
+                    ringClass = 'ring-2 ring-blue-500/20';
+                }
+                break;
+        }
+
+        // Selection override for non-running/completed states if needed, 
+        // or just add a selection ring if one isn't already there.
+        if (isSelected && s !== 'idle') {
+            // Add a subtle extra indicator or keep the status ring? 
+            // Usually, status takes precedence for border color, but selection needs to be seen.
+            // Let's rely on the status border but add a standard selection shadow or ring if not already ringing.
+            if (s === 'completed' || s === 'failed') {
+                ringClass = 'ring-2 ring-offset-1 ' + (s === 'completed' ? 'ring-green-500/40' : 'ring-red-500/40');
+            }
+        }
+
+        return { borderClass, ringClass, textClass, bgClass };
+    };
+
+    const styles = getStatusStyles(data.status, selected);
+
     return (
         <div className={`
-            flex items-center gap-3 px-4 py-3 shadow-lg rounded-xl bg-white 
-            border transition-colors min-w-[150px]
-            ${selected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-stone-200'}
+            flex items-center gap-3 px-4 py-3 shadow-lg rounded-xl 
+            border transition-all duration-300 min-w-[150px]
+            ${styles.bgClass}
+            ${styles.borderClass}
+            ${styles.ringClass}
         `}>
             <div
                 onClick={handleRun}
@@ -50,7 +95,7 @@ const StartNodeComponent = ({ data, selected }: NodeProps<StartNodeData>) => {
                 <span className="text-sm font-bold text-gray-800 leading-tight">
                     {data.name || 'Start'}
                 </span>
-                <span className="text-xs font-semibold text-gray-400 tracking-wide uppercase mt-0.5">
+                <span className={`text-xs font-bold tracking-wide uppercase mt-0.5 ${styles.textClass}`}>
                     {data.status || 'IDLE'}
                 </span>
             </div>

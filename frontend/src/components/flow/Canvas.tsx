@@ -14,7 +14,6 @@ import { useWorkflowStore } from '../../store/useWorkflowStore';
 import { v4 as uuidv4 } from 'uuid';
 import { StartNode } from '../../nodes/StartNode';
 import '@xyflow/react/dist/style.css';
-import { useShallow } from 'zustand/react/shallow';
 
 const nodeTypes = {
     startNode: StartNode,
@@ -26,8 +25,8 @@ export function Canvas() {
 
     // ⚡️ FAST: Direct selection from root state.
     // No .find(), no complex object comparison.
-    const nodes = useWorkflowStore(useShallow((state) => state.nodes));
-    const edges = useWorkflowStore(useShallow((state) => state.edges));
+    const nodes = useWorkflowStore((state) => state.nodes);
+    const edges = useWorkflowStore((state) => state.edges);
     const onNodesChange = useWorkflowStore((state) => state.onNodesChange);
     const onEdgesChange = useWorkflowStore((state) => state.onEdgesChange);
     const onConnect = useWorkflowStore((state) => state.onConnect);
