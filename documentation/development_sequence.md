@@ -129,4 +129,31 @@ This document tracks the sequence of tasks completed to build the current system
    - **Action**: Refined `CommandNode` UI: Input field now has better focus states and background styling.
    - **Action**: Implemented **Info Overlay** for descriptions to prevent layout shifts/resizing.
    - **Action**: Added **History Status Tracking** (Success/Failure icons) to the history log.
-   - **Action**: Improved Safety Lock UX: Auto-reveals risk description upon unlock.
+   - [x] Action: Improved Safety Lock UX: Auto-reveals risk description upon unlock.
+
+   |
+   |
+   v
+
+**17. Default Workflow Creation**
+   - **Action**: Implemented auto-creation of "Workflow 1" in `App.tsx` if the remote fetch returns an empty list.
+   - **Action**: Updated `useWorkflowStore` to handle initial workflow creation logic.
+   - **Benefit**: Users never see a blank/empty state upon first load.
+
+   |
+   |
+   v
+
+**18. Command Node Optimization & Polish**
+   - **Action**: Refactored `CommandNode.tsx` for visual feedback (Gradient Borders, Pulse effects).
+   - **Action**: Implemented distinct states: `Generating` (Blue Pulse), `Running` (Amber Rotation), `Success` (Green), `Error` (Red).
+   - **Fix**: Resolved TypeScript errors (`ringClass`, `useRef`, types).
+   - **Performance**: Optimized re-renders and drag performance.
+
+   |
+   |
+   v
+
+**19. Documentation Sync**
+   - **Action**: Updated `development_sequence.md` and `unofficial_flow.md` to reflect the current system state prior to LangGraph integration.
+

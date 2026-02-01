@@ -133,3 +133,20 @@ To prevent accidental execution of destructive commands (e.g., `rm -rf`), a fric
     - **Safe (Green)**: Immediate execution allowed.
     - **Caution (Yellow)**: Auto-reveals risk description in an overlay when unlocked.
     - **Critical (Red)**: Shows "System Impact" in overlay; requires explicit unlock to access the "Run Critical" button.
+
+### 8. Recent Enhancements
+
+#### A. Automatic Workflow Initialization
+To ensure a seamless user experience, the system now guarantees that a workflow always exists.
+- **Logic**: Upon initialization, if the backend returns an empty workflow list, the frontend automatically triggers a creation request for "Workflow 1".
+- **Result**: The "Zero State" is effectively removed, allowing users to start working immediately.
+
+#### B. Command Node Visualization
+The `CommandNode` has been upgraded to providing rich, real-time visual feedback:
+- **State-Aware Borders**:
+    - **Generating**: Pulsing Blue Gradient.
+    - **Running**: Rotating Amber/Orange border.
+    - **Success**: Solid Green border (transient).
+    - **Error**: Solid Red border (transient).
+- **Performance**: Optimized using `memo` and refined CSS transitions to maintain 60fps even during complex animations.
+
