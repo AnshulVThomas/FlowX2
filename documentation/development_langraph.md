@@ -12,3 +12,18 @@ This document tracks the specific sequence of tasks for the LangGraph integratio
    |
    v
 
+## Phase 2: Tier 1 - Validation Layer
+
+**2. Validator Implementation**
+   - **Action**: Created `backend/engine` directory.
+   - **Action**: Implemented `backend/engine/validator.py` with `validate_workflow` function.
+   - **Logic**:
+     - **Topological**: Enforces exactly one Start Node (CRITICAL).
+     - **Connectivity**: Warns about orphan nodes (WARNING).
+     - **Command Check**: Validates non-empty commands and checks for regex placeholders `<...>` (CRITICAL).
+   - **Outcome**: Returns `True` or raises `400 HTTPException` with schema-compliant error list.
+   |
+   |
+   v
+
+
