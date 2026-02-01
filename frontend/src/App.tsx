@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 
 function App() {
   const isConnected = useServerStatus();
-  const { setWorkflows } = useWorkflowStore();
+  const { setWorkflows, createWorkflow } = useWorkflowStore();
 
   useEffect(() => {
     if (isConnected) {
@@ -20,12 +20,14 @@ function App() {
             setWorkflows(workflows);
             toast.success('Workflows synced with server');
           } else {
-            toast.info('No workflows found. Create a new one to get started!');
+            // Auto-create default workflow
+            createWorkflow('Workflow 1');
+            toast.info('Created new default workflow');
           }
         })
         .catch(() => toast.error('Failed to sync workflows'));
     }
-  }, [isConnected, setWorkflows]);
+  }, [isConnected, setWorkflows, createWorkflow]);
 
   return (
     <ReactFlowProvider>

@@ -112,6 +112,19 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
 
     const terminalRef = useRef<TerminalRef>(null);
 
+    // Safety: Ensure status matches history on mount/update (Fixes "Green Node" on init)
+    useEffect(() => {
+        if (!data.history || data.history.length === 0) {
+            setResultStatus(null);
+        } else {
+            // Optional: Sync status if history exists (double-check)
+            const last = data.history[0];
+            if (last.type === 'executed' && last.status) {
+                setResultStatus(last.status === 'success' ? 'success' : 'error');
+            }
+        }
+    }, [data.history]);
+
     // --- HANDLERS ---
 
     // Memoize handlers to prevent prop thrashing
@@ -214,11 +227,11 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
         // Priority 2: Running (Pulse Indigo)
         ringClass = "ring-2 ring-indigo-500 animate-pulse";
         shadowClass = "shadow-xl shadow-indigo-500/30";
-    } else if (resultStatus === 'success') {
-        // Priority 3: Success (Green)
+    } else if (resultStatus === 'success' && data.history && data.history.length > 0) {
+        // Priority 3: Success (Green) - Only if we actually have history
         ringClass = "ring-2 ring-emerald-500";
         shadowClass = "shadow-xl shadow-emerald-500/20";
-    } else if (resultStatus === 'error') {
+    } else if (resultStatus === 'error' && data.history && data.history.length > 0) {
         // Priority 4: Error (Red)
         ringClass = "ring-2 ring-rose-500";
         shadowClass = "shadow-xl shadow-rose-500/20";
