@@ -1,7 +1,7 @@
 import { useRef, memo, useState, useCallback, useEffect } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { Sparkles, Terminal, Play, Settings, Save, RefreshCw, Square, Check, AlertTriangle, ShieldAlert, Maximize2, Minimize2, History, X, Lock, Unlock, Info } from 'lucide-react';
-import { generateCommand, fetchSystemInfo } from '../services/api';
+import { Sparkles, Terminal, Play, Settings, Save, Square, Check, AlertTriangle, ShieldAlert, Maximize2, Minimize2, History, X, Lock, Unlock, Info } from 'lucide-react';
+import { generateCommand } from '../services/api';
 import { useWorkflowStore } from '../store/useWorkflowStore';
 import TerminalComponent, { type TerminalRef } from '../components/TerminalComponent';
 import { toast } from 'sonner';
