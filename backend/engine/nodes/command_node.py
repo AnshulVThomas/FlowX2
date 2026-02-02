@@ -26,6 +26,14 @@ class CommandNode(FlowXNode):
                 "level": "CRITICAL"
             })
 
+        # Locked Check
+        if node_data.get("locked") is True:
+             errors.append({
+                "nodeId": node_id,
+                "message": "Node is locked. Please unlock to proceed.",
+                "level": "CRITICAL"
+            })
+
         return {
             "valid": len(errors) == 0,
             "errors": errors

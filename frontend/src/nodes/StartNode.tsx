@@ -1,7 +1,8 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { Play } from 'lucide-react';
+import { Play, Loader2 } from 'lucide-react';
 import { useWorkflowStore } from '../store/useWorkflowStore';
+import { ValidationShield } from '../components/ValidationShield';
 import { toast } from 'sonner';
 
 export type StartNodeData = Node<{
@@ -10,18 +11,26 @@ export type StartNodeData = Node<{
 }>;
 
 // 1. Define the component
-const StartNodeComponent = ({ data, selected }: NodeProps<StartNodeData>) => {
-    // 2. Select ONLY the action needed. 
+const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) => {
+    // 2. Select actions
     const saveActiveWorkflow = useWorkflowStore((state) => state.saveActiveWorkflow);
+    const validateGraph = useWorkflowStore((state) => state.validateGraph);
+
+    const [isValidating, setIsValidating] = useState(false);
 
     const handleRun = async (e: React.MouseEvent) => {
-        e.stopPropagation(); // Stop the click from selecting the node
+        e.stopPropagation();
 
+        setIsValidating(true);
         try {
             await saveActiveWorkflow();
-            toast.success('Workflow saved and run started');
+            await validateGraph();
+            toast.success('Workflow validated and saved');
         } catch (error) {
-            toast.error('Failed to save workflow');
+            toast.error('Validation/Save failed');
+        } finally {
+            // Keep animation for a moment to be visible
+            setTimeout(() => setIsValidating(false), 800);
         }
     };
 
@@ -75,28 +84,45 @@ const StartNodeComponent = ({ data, selected }: NodeProps<StartNodeData>) => {
 
     return (
         <div className={`
-            flex items-center gap-3 px-4 py-3 shadow-lg rounded-xl 
+            relative flex items-center gap-3 px-4 py-3 shadow-lg rounded-xl 
             border transition-all duration-300 min-w-[150px]
             ${styles.bgClass}
             ${styles.borderClass}
             ${styles.ringClass}
         `}>
+            {/* Shield Icon for Self-Validation */}
+            <ValidationShield
+                nodeId={id}
+                className="absolute -top-2 -right-2 z-10 scale-0 animate-in zoom-in duration-300 fill-mode-forwards"
+            />
+
             <div
                 onClick={handleRun}
-                className="group rounded-full w-10 h-10 flex justify-center items-center bg-blue-50 border border-blue-100 shadow-sm shrink-0 cursor-pointer hover:bg-blue-500 transition-all duration-300"
+                className={`
+                    group rounded-full w-10 h-10 flex justify-center items-center 
+                    border shadow-sm shrink-0 cursor-pointer transition-all duration-300
+                    ${isValidating
+                        ? 'bg-amber-100 border-amber-200 text-amber-600 animate-spin'
+                        : 'bg-blue-50 border-blue-100 hover:bg-blue-500'
+                    }
+                `}
             >
-                <Play
-                    size={20}
-                    className="text-blue-500 fill-blue-500/20 group-hover:text-white group-hover:fill-white ml-0.5"
-                />
+                {isValidating ? (
+                    <Loader2 size={20} />
+                ) : (
+                    <Play
+                        size={20}
+                        className="text-blue-500 fill-blue-500/20 group-hover:text-white group-hover:fill-white ml-0.5"
+                    />
+                )}
             </div>
 
             <div className="flex flex-col">
                 <span className="text-sm font-bold text-gray-800 leading-tight">
                     {data.name || 'Start'}
                 </span>
-                <span className={`text-xs font-bold tracking-wide uppercase mt-0.5 ${styles.textClass}`}>
-                    {data.status || 'IDLE'}
+                <span className={`text-xs font-bold tracking-wide uppercase mt-0.5 ${isValidating ? 'text-amber-500' : styles.textClass}`}>
+                    {isValidating ? 'VERIFYING...' : (data.status || 'IDLE')}
                 </span>
             </div>
 

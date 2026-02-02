@@ -24,9 +24,12 @@ interface WorkflowState {
     edges: Edge[];
     isDirty: boolean; // <--- The new source of truth for the active workflow
     validationStatus: Record<string, string>;
+    validationErrors: Record<string, string[]>; // NodeID -> List of error messages
+    isProcessSidebarOpen: boolean;
 
     // Actions
     validateGraph: () => Promise<void>;
+    toggleProcessSidebar: () => void;
 
     // Editor Actions
     startWorkflowCreation: () => void;
@@ -63,9 +66,12 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     edges: [],
     isDirty: false,
     validationStatus: {},
+    validationErrors: {},
+    isProcessSidebarOpen: false,
     systemContext: null,
 
     setSystemContext: (context) => set({ systemContext: context }),
+    toggleProcessSidebar: () => set((state) => ({ isProcessSidebarOpen: !state.isProcessSidebarOpen })),
 
     startWorkflowCreation: () => set({ isCreatingWorkflow: true }),
     cancelWorkflowCreation: () => set({ isCreatingWorkflow: false }),
@@ -256,7 +262,22 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         try {
             const result = await validateWorkflow(nodes, edges);
             if (result.status === 'success') {
-                set({ validationStatus: result.validation_map });
+                const statusMap = result.validation_map || {};
+                const errorList = result.errors || [];
+
+                // Group errors by Node ID
+                const errorMap: Record<string, string[]> = {};
+                errorList.forEach((err: any) => {
+                    if (err.nodeId) {
+                        if (!errorMap[err.nodeId]) errorMap[err.nodeId] = [];
+                        errorMap[err.nodeId].push(err.message);
+                    }
+                });
+
+                set({
+                    validationStatus: statusMap,
+                    validationErrors: errorMap
+                });
             }
         } catch (error) {
             console.error("Validation failed", error);
