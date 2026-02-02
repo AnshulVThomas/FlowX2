@@ -11,7 +11,7 @@ import {
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
 import type { Workflow, WorkflowSummary } from '../types';
-import { fetchWorkflowDetails, deleteWorkflow as apiDeleteWorkflow, saveWorkflow as apiSaveWorkflow, validateWorkflow } from '../services/api';
+import { fetchWorkflowDetails, deleteWorkflow as apiDeleteWorkflow, saveWorkflow as apiSaveWorkflow, validateWorkflow, executeWorkflow } from '../services/api';
 
 interface WorkflowState {
     // Global Lists
@@ -29,6 +29,7 @@ interface WorkflowState {
 
     // Actions
     validateGraph: () => Promise<void>;
+    executeGraph: () => Promise<void>;
     toggleProcessSidebar: () => void;
 
     // Editor Actions
@@ -288,6 +289,67 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         } catch (error) {
             console.error("Validation failed", error);
             set({ validationStatus: {} });
+        }
+    },
+
+    executeGraph: async () => {
+        const { activeId, nodes, edges, validationStatus } = get();
+
+        // 1. Validate first? Or assume component did it?
+        // Let's assume user handled validation.
+
+        // 2. Prepare Workflow Data
+        const workflowData = {
+            id: activeId,
+            nodes,
+            edges
+        };
+
+        try {
+            const response = await executeWorkflow(workflowData);
+
+            // 3. Update Nodes based on initial response
+            // If response is RUNNING/PAUSED, we might have logs or state
+            // For now, let's look at the logs to deduce node status
+            // Example Log: { node_id: "cmd1", message: "..." }
+            // Real-time updates need WebSocket.
+            // But if it returns "ATTENTION_REQUIRED" immediately (e.g. paused at start?), we handle it.
+
+            // Just basic handling for Tier 3 verification:
+            // If we have logs, update status of those nodes?
+            // Actually, executeWorkflow runs the whole graph?
+            // If it returns, the graph is likely DONE or PAUSED.
+
+            // Ideally we iterate logs and update nodes
+            // But we don't have log parsing logic yet.
+            // Minimal: If status is ATTENTION_REQUIRED, find the node that caused it?
+            // LangGraph doesn't easily tell us "which node paused" in the root response unless we inspect state.
+
+            // For now, let's just log result to console.
+            console.log("Execution Result:", response);
+
+            // Update thread_id on all nodes? Or just keep it loosely?
+            // Ideally active thread_id should be stored in Store active state?
+            // But our CommandNode takes it from data.thread_id.
+            // So we should update ALL nodes with the thread_id?
+
+            const threadId = response.thread_id;
+
+            set(state => ({
+                nodes: state.nodes.map(node => ({
+                    ...node,
+                    data: {
+                        ...node.data,
+                        thread_id: threadId,
+                        execution_status: response.status === 'COMPLETED' ? 'completed' : 'running'
+                        // This is a naive update. Real update needs granular node mapping.
+                    }
+                }))
+            }));
+
+        } catch (error) {
+            console.error("Execution Failed", error);
+            // Optionally set global error state
         }
     },
 

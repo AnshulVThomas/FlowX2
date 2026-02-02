@@ -72,9 +72,17 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
             // Await both to ensure sequentiality
             await saveActiveWorkflow();
             await validateGraph();
-            toast.success('Workflow validated and saved');
+
+            // Execute Tier 3 Backend
+            // We access store directly or via hook props?
+            // Since we are inside component, we can use the selector below
+            // Actually, we didn't select executeGraph yet. 
+            // We should use store.getState().executeGraph() or add it to selectors.
+            await useWorkflowStore.getState().executeGraph();
+
+            toast.success('Execution Started');
         } catch (error) {
-            toast.error('Validation/Save failed');
+            toast.error('Execution failed');
         } finally {
             // Keep animation for a moment for UX visibility
             setTimeout(() => setIsValidating(false), 800);

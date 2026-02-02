@@ -21,4 +21,8 @@ export type CommandNodeData = Node<{
         type: 'generated' | 'executed';
         status?: 'success' | 'failure' | 'pending';
     }>;
+
+    // Tier 3 Execution Fields
+    execution_status?: "generated" | "running" | "completed" | "failed" | "attention_required";
+    thread_id?: string;
 }>;

@@ -63,7 +63,7 @@ def validate_graph(nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]]) -> 
         
         try:
             node_class = NodeRegistry.get_node(node_type)
-            strategy = node_class()
+            strategy = node_class(node)
             result = strategy.validate(node)
             
             if result['valid']:

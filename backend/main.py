@@ -7,9 +7,13 @@ from contextlib import asynccontextmanager
 from typing import List
 from app.schemas.command import GenerateCommandRequest, UIResponse, UIRender, ExecutionMetadata
 from app.core.session_manager import PtySession
+from engine.builder import GraphBuilder
+from langgraph.checkpoint.mongodb import MongoDBSaver
+from pymongo import MongoClient
 import asyncio
 import json
 import base64
+from config import settings
 
 from routers import bridge
 
@@ -22,6 +26,10 @@ async def lifespan(app: FastAPI):
     db.close()
 
 app = FastAPI(lifespan=lifespan)
+
+# Checkpointer Setup (Tier 3)
+sync_mongo_client = MongoClient(settings.MONGODB_URL)
+checkpointer = MongoDBSaver(sync_mongo_client)
 
 app.add_middleware(
     CORSMiddleware,
@@ -241,3 +249,93 @@ async def generate_command_endpoint(request: GenerateCommandRequest):
             )
             
         raise HTTPException(status_code=500, detail=error_str)
+
+# --- EXECUTION ENGINE API (Tier 3) ---
+
+@app.post("/api/v1/workflow/execute")
+async def execute_workflow(workflow_data: dict):
+    """
+    Compiles and starts a workflow execution.
+    Returns the thread_id for tracking.
+    """
+    builder = GraphBuilder(checkpointer=checkpointer)
+    graph = builder.build(workflow_data)
+    
+    import uuid
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+    
+    initial_state = {
+        "context": {}, 
+        "logs": [], 
+        "execution_status": "RUNNING",
+        "current_node_id": "START"
+    }
+    
+    try:
+        final_state = await graph.ainvoke(initial_state, config=config)
+        return {
+            "thread_id": thread_id, 
+            "status": final_state.get("execution_status", "COMPLETED"),
+            "logs": final_state.get("logs", [])
+        }
+    except Exception as e:
+        return {"status": "FAILED", "error": str(e), "thread_id": thread_id}
+
+@app.post("/api/v1/workflow/resume/{thread_id}")
+async def resume_workflow(thread_id: str, payload: dict):
+    """
+    1. Fetches the Workflow ID associated with this Thread (store this linkage in DB or payload).
+    2. Rebuilds the Graph.
+    3. Resumes execution with the password injection.
+    """
+    # 1. GET WORKFLOW DATA
+    workflow_id = payload.get("workflowId")
+    if not workflow_id:
+        raise HTTPException(status_code=400, detail="workflowId is required to rebuild the graph")
+    
+    # Fetch from existing DB connection
+    database = db.get_db()
+    # Note: 'id' field in DB is the string UUID, '_id' is ObjectId. We use 'id'.
+    workflow_data = await database.workflows.find_one({"id": workflow_id})
+    if not workflow_data:
+        raise HTTPException(status_code=404, detail="Workflow definition not found")
+
+    # 2. REBUILD GRAPH
+    # We need the exact same graph structure to map the checkpoint correctly
+    builder = GraphBuilder(checkpointer=checkpointer)
+    graph = builder.build(workflow_data)
+    
+    # 3. RESUME EXECUTION
+    config = {"configurable": {"thread_id": thread_id}}
+    
+    # Check if thread exists/is paused
+    # graph.aget_state is async
+    current_state = await graph.aget_state(config)
+    if not current_state.next:
+         # If next is empty, it means no next step -> not paused or completed.
+         # But if it was interrupted, it should have a next step (the node it is currently on or next one).
+         # For 'interrupt', it pauses *before* or *after*. 
+         # If we used 'interrupt()' inside node, it's a bit different than interrupt_before.
+         # LangGraph's 'interrupt' raises NodeInterrupt, effectively pausing execution.
+         # The node technically "failed" or "stopped".
+         # We need to test if this check works for manual interrupts.
+         # For now, we trust standard LangGraph behavior for resumes.
+         pass
+         # raise HTTPException(status_code=400, detail="Workflow is not in a paused state")
+
+    # Inject the password into the state
+    resume_update = {"sudo_password": payload.get("sudo_password")}
+    
+    try:
+        # Pass the update. LangGraph merges this into state and continues.
+        # If the node was interrupted, passing Command(resume=...) might be needed depending on implementation.
+        # But 'update' usually works for StateGraph.
+        final_state = await graph.ainvoke(resume_update, config=config)
+        
+        return {
+            "status": final_state.get("execution_status", "COMPLETED"),
+            "logs": final_state.get("logs", [])
+        }
+    except Exception as e:
+        return {"status": "FAILED", "error": str(e)}

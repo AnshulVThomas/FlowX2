@@ -16,6 +16,9 @@ class FlowXNode(ABC):
     Enforces the strategy pattern for validation and execution.
     """
     
+    def __init__(self, data: Dict[str, Any]):
+        self.data = data
+
     @abstractmethod
     def validate(self, data: Dict[str, Any]) -> ValidationResult:
         """

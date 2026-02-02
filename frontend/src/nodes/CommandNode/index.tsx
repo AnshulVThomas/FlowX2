@@ -15,6 +15,7 @@ import { SettingsView } from './SettingsView';
 import { InfoOverlay } from './InfoOverlay';
 import { Footer } from './Footer';
 import { ValidationShield } from '../../components/ValidationShield';
+import { ResumeOverlay } from './ResumeOverlay';
 
 export type { CommandNodeData } from './types';
 
@@ -319,6 +320,17 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                 className="absolute -top-3 -right-3 z-50 transition-all duration-300 transform hover:scale-110"
             />
 
+            {/* Resume Overlay (Tier 3 Execution) */}
+            {data.execution_status === 'attention_required' && data.thread_id && (
+                <ResumeOverlay
+                    threadId={data.thread_id}
+                    workflowId={useWorkflowStore.getState().activeId || ''} // Direct access or hook? 
+                // Better to use hook inside component or pass as prop?
+                // ResumeOverlay can fetch it if we pass nothing? 
+                // Let's rely on store.getState() for now or add a hook call above.
+                />
+            )}
+
             {/* OPTIMIZATION 3: Conditional Rendering. */}
             {isLoading && (
                 <div className="absolute -inset-[3px] rounded-xl overflow-hidden pointer-events-none">
@@ -477,6 +489,8 @@ function propsAreEqual(prev: NodeProps<CommandNodeData>, next: NodeProps<Command
         prev.data.locked === next.data.locked &&
         prev.data.ui_render?.badge_color === next.data.ui_render?.badge_color &&
         prev.data.ui_render?.code_block === next.data.ui_render?.code_block &&
+        prev.data.execution_status === next.data.execution_status &&
+        prev.data.thread_id === next.data.thread_id &&
         // Shallow check for history array itself (store updates create new array refs)
         prev.data.history === next.data.history
     );

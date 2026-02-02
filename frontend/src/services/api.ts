@@ -159,3 +159,51 @@ export const validateWorkflow = async (nodes: any[], edges: any[]) => {
         throw error;
     }
 };
+
+export interface ExecutionResponse {
+    thread_id: string;
+    status: "RUNNING" | "PAUSED" | "COMPLETED" | "FAILED" | "ATTENTION_REQUIRED";
+    logs: any[];
+    error?: string;
+}
+
+export const executeWorkflow = async (workflow: any): Promise<ExecutionResponse> => {
+    try {
+        const response = await fetch(`${API_URL}/api/v1/workflow/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(workflow),
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || err.error || 'Execution failed');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error executing workflow:', error);
+        throw error;
+    }
+};
+
+export const resumeWorkflow = async (threadId: string, workflowId: string, sudoPassword?: string): Promise<ExecutionResponse> => {
+    try {
+        const response = await fetch(`${API_URL}/api/v1/workflow/resume/${threadId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                workflowId,
+                sudo_password: sudoPassword
+            }),
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || err.error || 'Resume failed');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error resuming workflow:', error);
+        throw error;
+    }
+};

@@ -14,6 +14,11 @@ const ProcessList = () => {
     const processNodes = nodes.filter((n): n is CommandNodeData => n.type === 'commandNode');
 
     const getStatus = (node: CommandNodeData) => {
+        // Tier 3: Priority to real-time status
+        if (node.data.execution_status) {
+            return node.data.execution_status;
+        }
+        // Legacy fallback
         if (node.data.history && node.data.history.length > 0) {
             const last = node.data.history[0];
             if (last.type === 'executed' && last.status) return last.status;
@@ -34,6 +39,24 @@ const ProcessList = () => {
         <div className="space-y-3">
             {processNodes.map(node => {
                 const status = getStatus(node);
+                // Map status to badge style
+                let badgeClass = 'bg-gray-500/20 text-gray-400';
+                let label = status.toUpperCase();
+
+                if (status === 'running' || status === 'pending') {
+                    badgeClass = 'bg-indigo-500/20 text-indigo-300';
+                    label = 'RUNNING';
+                } else if (status === 'success' || status === 'completed') {
+                    badgeClass = 'bg-emerald-500/20 text-emerald-300';
+                    label = 'SUCCESS';
+                } else if (status === 'failure' || status === 'failed') {
+                    badgeClass = 'bg-rose-500/20 text-rose-300';
+                    label = 'ERROR';
+                } else if (status === 'attention_required') {
+                    badgeClass = 'bg-yellow-500/20 text-yellow-300 animate-pulse';
+                    label = 'WAITING';
+                }
+
                 return (
                     <div key={node.id} className="bg-white/5 border border-white/10 rounded-lg p-3 hover:bg-white/10 transition-colors">
                         <div className="flex items-center gap-2 mb-1">
@@ -47,14 +70,8 @@ const ProcessList = () => {
                             <span className="text-gray-500 font-mono truncate max-w-[150px]">
                                 {node.id}
                             </span>
-                            <span className={`
-                                px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider
-                                ${status === 'pending' ? 'bg-indigo-500/20 text-indigo-300'
-                                    : status === 'success' ? 'bg-emerald-500/20 text-emerald-300'
-                                        : status === 'failure' ? 'bg-rose-500/20 text-rose-300'
-                                            : 'bg-gray-500/20 text-gray-400'}
-                            `}>
-                                {status === 'pending' ? 'RUNNING' : status === 'failure' ? 'ERROR' : status.toUpperCase()}
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${badgeClass}`}>
+                                {label}
                             </span>
                         </div>
                     </div>
