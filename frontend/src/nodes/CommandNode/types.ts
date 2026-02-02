@@ -19,6 +19,7 @@ export type CommandNodeData = Node<{
     // Tier 3 Execution Fields
     execution_status?: "generated" | "running" | "completed" | "failed" | "attention_required";
     thread_id?: string;
+    logs?: string[]; // Buffer for rehydration
 }>;
 
 export type HistoryItem = {

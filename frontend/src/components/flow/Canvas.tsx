@@ -46,8 +46,8 @@ export function Canvas() {
     let tooltipLabel = '';
     if (hoveredEdge) {
         const behavior = hoveredEdge.data?.behavior || 'conditional';
-        if (behavior === 'force') tooltipLabel = 'Always Run (Force)';
-        else if (behavior === 'failure') tooltipLabel = 'Failure Only';
+        if (behavior === 'force') tooltipLabel = 'Force (Always Run)';
+        else if (behavior === 'failure') tooltipLabel = 'Conditional (Error Only)';
         else tooltipLabel = 'Conditional (Success Only)';
     }
 
@@ -159,6 +159,7 @@ export function Canvas() {
                             whiteSpace: 'nowrap',
                             userSelect: 'none',
                             WebkitUserSelect: 'none',
+                            textAlign: 'center',
                         }}
                     >
                         {tooltipLabel}

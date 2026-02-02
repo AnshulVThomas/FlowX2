@@ -32,7 +32,7 @@ function App() {
 
   useEffect(() => {
     connectGlobalSocket();
-  }, []);
+  }, [connectGlobalSocket]);
 
   return (
     <ReactFlowProvider>

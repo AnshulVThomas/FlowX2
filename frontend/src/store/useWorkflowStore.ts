@@ -11,25 +11,27 @@ import {
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
 import type { Workflow, WorkflowSummary } from '../types';
-import { fetchWorkflowDetails, deleteWorkflow as apiDeleteWorkflow, saveWorkflow as apiSaveWorkflow, validateWorkflow, executeWorkflow } from '../services/api';
+import { fetchWorkflowDetails, deleteWorkflow as apiDeleteWorkflow, saveWorkflow as apiSaveWorkflow, validateWorkflow, executeWorkflow, cancelWorkflow } from '../services/api';
 
 interface WorkflowState {
     // Global Lists
     workflows: Workflow[];
-    activeId: string | null;
-    isCreatingWorkflow: boolean;
+    activeThreadId: string | null; // Track execution thread
 
-    // ⚡️ ACTIVE EDITOR STATE
+    // State
+    activeId: string | null;
     nodes: Node[];
     edges: Edge[];
-    isDirty: boolean; // <--- The new source of truth for the active workflow
+    isDirty: boolean;
+    isCreatingWorkflow: boolean;
     validationStatus: Record<string, string>;
-    validationErrors: Record<string, string[]>; // NodeID -> List of error messages
+    validationErrors: Record<string, string[]>;
     isProcessSidebarOpen: boolean;
 
     // Actions
     validateGraph: () => Promise<void>;
     executeGraph: () => Promise<void>;
+    abortWorkflow: () => Promise<void>;
     toggleProcessSidebar: () => void;
 
     // Editor Actions
@@ -63,9 +65,13 @@ interface WorkflowState {
     connectGlobalSocket: () => void;
 }
 
+// Singleton to prevent double-connections in Strict Mode
+let globalSocket: WebSocket | null = null;
+
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     workflows: [],
     activeId: null,
+    activeThreadId: null,
     isCreatingWorkflow: false,
     nodes: [],
     edges: [],
@@ -198,7 +204,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
             id: uuidv4(),
             type: 'default',
             data: { behavior: 'conditional' },
-            style: { stroke: '#22c55e', strokeDasharray: '5,5', strokeWidth: 2 }, // Default: Green Dotted
+            style: { stroke: '#22c55e', strokeDasharray: '5,5', strokeWidth: 2 }, // Default: Green Dashed
             animated: false,
         } as Edge;
         set((state) => ({
@@ -244,12 +250,12 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
                 if (isCurrentlyConditional) newBehavior = 'force';
                 else if (isForce) newBehavior = 'failure';
 
-                let style = { stroke: '#22c55e', strokeDasharray: '5,5', strokeWidth: 2 }; // Default: Conditional
+                let style = { stroke: '#22c55e', strokeDasharray: '5,5', strokeWidth: 2 }; // Default: Conditional Dashed
 
                 if (newBehavior === 'force') {
-                    style = { stroke: '#f59e0b', strokeDasharray: '5,5', strokeWidth: 2 }; // Orange
+                    style = { stroke: '#f59e0b', strokeDasharray: '0', strokeWidth: 2 }; // Orange Solid
                 } else if (newBehavior === 'failure') {
-                    style = { stroke: '#ef4444', strokeDasharray: '5,5', strokeWidth: 2 }; // Red
+                    style = { stroke: '#ef4444', strokeDasharray: '5,5', strokeWidth: 2 }; // Red Dashed
                 }
 
                 return {
@@ -339,15 +345,32 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     },
 
     executeGraph: async () => {
-        const { activeId, nodes, edges, validationStatus } = get();
+        const { activeId, nodes, edges } = get();
 
         // 1. Validate first? Or assume component did it?
         // Let's assume user handled validation.
 
-        // 2. Prepare Workflow Data
+        // --- 1. RESET STATE (The Fix) ---
+        // Clear status, logs, and thread_id for ALL nodes before starting.
+        // This ensures nodes that aren't reached in this run don't keep old colors.
+        const resetNodes = nodes.map(node => ({
+            ...node,
+            data: {
+                ...node.data,
+                execution_status: undefined, // Removes Green/Red Border
+                thread_id: undefined,        // Unlinks old thread
+                logs: [],                    // Clears internal log buffer
+                // Note: We PRESERVE 'command', 'prompt', 'history'
+            }
+        }));
+
+        // Apply reset immediately to UI
+        set({ nodes: resetNodes });
+
+        // --- 2. PREPARE PAYLOAD ---
         const workflowData = {
             id: activeId,
-            nodes,
+            nodes: resetNodes, // Send clean state
             edges
         };
 
@@ -383,6 +406,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
             const nodeResults = response.results || {};
 
             set(state => ({
+                activeThreadId: threadId, // Track for cancellation
                 nodes: state.nodes.map(node => {
                     const result = nodeResults[node.id];
                     let newStatus = node.data.execution_status;
@@ -415,6 +439,24 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         }
     },
 
+    abortWorkflow: async () => {
+        const { activeThreadId } = get();
+        if (!activeThreadId) {
+            console.warn("No active execution to cancel");
+            return;
+        }
+
+        try {
+            await cancelWorkflow(activeThreadId);
+            // We expect the backend to eventually return/cancel the executeGraph call,
+            // or we receive a socket event. 
+            // For immediate UI feedback, we can set status to 'cancelled' if we tracked it globally.
+            // But let's rely on the socket 'node_status' event for now.
+        } catch (error) {
+            console.error("Failed to abort workflow", error);
+        }
+    },
+
     markClean: (id) => {
         // If the ID matches the active one (or no ID provided), clean the editor state
         const { activeId } = get();
@@ -424,6 +466,12 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     },
 
     connectGlobalSocket: () => {
+        // 1. Singleton Check
+        if (globalSocket && (globalSocket.readyState === WebSocket.OPEN || globalSocket.readyState === WebSocket.CONNECTING)) {
+            console.log("Global Socket already active.");
+            return;
+        }
+
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.hostname;
         const port = '8000';
@@ -431,6 +479,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
         console.log("Connecting to Global Workflow Socket:", wsUrl);
         const ws = new WebSocket(wsUrl);
+        globalSocket = ws; // Assign singleton
 
         ws.onmessage = (event) => {
             try {
@@ -438,14 +487,69 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
                 // REACTIVE STATE UPDATES
                 if (msg.type === "node_status") {
-                    const { nodeId, status } = msg.data;
+                    const { nodeId, status, thread_id } = msg.data;
 
                     set(state => ({
-                        nodes: state.nodes.map(n =>
-                            n.id === nodeId
-                                ? { ...n, data: { ...n.data, execution_status: status } }
-                                : n
-                        )
+                        activeThreadId: thread_id || state.activeThreadId, // Sync global active thread if provided
+                        nodes: state.nodes.map(n => {
+                            if (n.id === nodeId) {
+                                let newData: any = {
+                                    ...n.data,
+                                    execution_status: status,
+                                    thread_id: thread_id || n.data.thread_id // Sync node thread
+                                };
+
+                                // Auto-Update History on Completion
+                                if (status === 'completed' || status === 'failed') {
+                                    const historyItem = {
+                                        prompt: n.data.prompt || "Workflow Execution",
+                                        command: n.data.command,
+                                        timestamp: Date.now(),
+                                        type: 'executed',
+                                        runType: 'workflow',
+                                        status: status === 'completed' ? 'success' : 'failure'
+                                    };
+                                    // Append and keep last 5
+                                    const currentHistory = (n.data.history as any[]) || [];
+                                    newData = {
+                                        ...newData,
+                                        history: [historyItem, ...currentHistory].slice(0, 5)
+                                    };
+                                }
+                                return { ...n, data: newData };
+                            }
+                            return n;
+                        })
+                    }));
+                }
+
+                // RELAY LOGS TO COMPONENTS (Event Bus Pattern)
+                if (msg.type === "node_log") {
+                    const { nodeId, log, type, thread_id } = msg.data;
+
+                    // 1. Dispatch for Realtime (Active Listeners)
+                    window.dispatchEvent(new CustomEvent(`node-log-${nodeId}`, {
+                        detail: { log, type }
+                    }));
+
+                    // 2. Persist in Store (Buffered Rehydration)
+                    set(state => ({
+                        activeThreadId: thread_id || state.activeThreadId, // Sync global active thread
+                        nodes: state.nodes.map(n => {
+                            if (n.id === nodeId) {
+                                // Append log to existing buffer
+                                const currentLogs = (n.data as any).logs || [];
+                                return {
+                                    ...n,
+                                    data: {
+                                        ...n.data,
+                                        logs: [...currentLogs, log],
+                                        thread_id: thread_id || n.data.thread_id // Sync node thread
+                                    }
+                                };
+                            }
+                            return n;
+                        })
                     }));
                 }
 

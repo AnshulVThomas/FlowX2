@@ -17,22 +17,29 @@ interface TerminalComponentProps {
     mode?: 'interactive' | 'stream';
     nodeId?: string;
     shouldConnect?: boolean;
+    initialLogs?: string[];
+    runId?: string;
 }
 
 const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
-    onClose,
-    onCommandComplete,
-    hideToolbar,
     mode = 'interactive',
+    onCommandComplete,
+    onClose,
+    hideToolbar = false,
     nodeId,
-    shouldConnect = true
+    shouldConnect,
+    initialLogs,
+    runId
 }, ref) => {
     const terminalRef = useRef<HTMLDivElement>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const xtermRef = useRef<Terminal | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
-    const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
     const bufferRef = useRef("");
+
+    // FIX: Add state to track when XTerm is actually created
+    const [isReady, setIsReady] = useState(false);
+    const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
 
     const onExecuteRef = useRef(onCommandComplete);
 
@@ -41,6 +48,7 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
         onExecuteRef.current = onCommandComplete;
     }, [onCommandComplete]);
 
+    // Exposed Methods
     useImperativeHandle(ref, () => ({
         runCommand: (cmd: string) => {
             if (mode === 'stream') {
@@ -48,7 +56,6 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
                 return;
             }
             if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                // Command Sentinel for exit code detection
                 const sentinel = `\nprintf "\\x1b]1337;DONE:%d\\x07" $?\r`;
                 const fullCommand = cmd + sentinel;
 
@@ -69,21 +76,19 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
         }
     }));
 
+    // --- 1. INITIALIZATION EFFECT ---
     useEffect(() => {
         if (!terminalRef.current) return;
 
-        // --- LAZY CONNECTION CHECK ---
+        // Lazy Connection Check
         if (!shouldConnect) {
-            // If we were connected, close it.
             if (wsRef.current) {
                 wsRef.current.close();
                 wsRef.current = null;
                 setStatus('disconnected');
             }
-            // Do not proceed to initialization
             return;
         }
-        // -----------------------------
 
         let term: Terminal | null = null;
         let ws: WebSocket | null = null;
@@ -91,7 +96,7 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
         let resizeObserver: ResizeObserver | null = null;
 
         const initTerminal = () => {
-            if (term) return;
+            if (term) return; // Prevent double init
 
             // Initialize Xterm
             term = new Terminal({
@@ -103,8 +108,8 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
                     foreground: '#f3f4f6',
                     cursor: '#6366f1',
                 },
-                disableStdin: mode === 'stream', // Read-only in stream mode
-                convertEol: true, // Help with newline conversion
+                disableStdin: mode === 'stream',
+                convertEol: true,
             });
 
             fitAddon = new FitAddon();
@@ -118,119 +123,86 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
             xtermRef.current = term;
             fitAddonRef.current = fitAddon;
 
-            // --- WebSocket Setup ---
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const host = window.location.hostname;
-            const port = '8000'; // Make sure this matches your backend port
+            // FIX: Signal that terminal is ready for logs
+            setIsReady(true);
 
-            // Interactive = PTY (Single Session)
-            // Stream = Workflow Bus (Broadcast)
-            const wsUrl = mode === 'interactive'
-                ? `${protocol}//${host}:${port}/ws/terminal`
-                : `${protocol}//${host}:${port}/ws/workflow`;
+            // --- WEBSOCKET LOGIC ---
+            if (mode === 'interactive') {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const host = window.location.hostname;
+                const port = '8000';
+                const wsUrl = `${protocol}//${host}:${port}/ws/terminal`;
 
-            console.log(`[Terminal] Connecting to ${wsUrl} in mode: ${mode}`);
+                ws = new WebSocket(wsUrl);
+                wsRef.current = ws;
 
-            ws = new WebSocket(wsUrl);
-            wsRef.current = ws;
+                ws.onopen = () => {
+                    setStatus('connected');
+                    term?.write('\x1b[32m\r\n[Connected to PTY Session]\x1b[0m\r\n');
+                    if (fitAddon) {
+                        const dims = fitAddon.proposeDimensions();
+                        if (dims) ws?.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+                    }
+                };
 
-            ws.onopen = () => {
-                setStatus('connected');
-                const msg = mode === 'interactive'
-                    ? '\x1b[32m\r\n[Connected to PTY Session]\x1b[0m\r\n'
-                    : `\x1b[32m\r\n[Connected to Workflow Stream: ${nodeId}]\x1b[0m\r\n`;
-                term?.write(msg);
-
-                // Initial Resize
-                if (mode === 'interactive' && fitAddon) {
-                    const dims = fitAddon.proposeDimensions();
-                    if (dims) ws?.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
-                }
-            };
-
-            ws.onmessage = (event) => {
-                if (!term) return;
-
-                if (mode === 'interactive') {
-                    // --- INTERACTIVE MODE (Raw Text) ---
+                ws.onmessage = (event) => {
+                    if (!term) return;
                     term.write(event.data);
 
-                    // Handle Sentinel for Exit Codes
                     if (onExecuteRef.current) {
                         const chunk = event.data as string;
                         bufferRef.current += chunk;
-                        // Limit buffer size to prevent memory leaks
                         if (bufferRef.current.length > 2000) bufferRef.current = bufferRef.current.slice(-2000);
-
-                        // Regex to find hidden exit code
                         const match = bufferRef.current.match(/\x1b]1337;DONE:(\d+)\x07/);
                         if (match) {
                             onExecuteRef.current(parseInt(match[1], 10));
                             bufferRef.current = "";
                         }
                     }
-                } else {
-                    // --- STREAM MODE (JSON Protocol) ---
-                    try {
-                        const msg = JSON.parse(event.data);
+                };
 
-                        // Check for both camelCase and snake_case to be safe
-                        const targetNodeId = msg.data?.nodeId || msg.data?.node_id;
+                ws.onclose = () => setStatus('disconnected');
+                ws.onerror = () => {
+                    setStatus('disconnected');
+                    term?.write('\r\n\x1b[31m[WebSocket Error]\x1b[0m\r\n');
+                };
 
-                        // Filter: Only show logs for THIS specific node
-                        if (msg.type === "node_log" && targetNodeId === nodeId) {
-
-                            // FIX: Xterm needs \r\n for newlines, backend usually sends \n
-                            let logText = msg.data.log || "";
-
-                            // Replace plain \n with \r\n to prevent "staircasing" text
-                            if (typeof logText === 'string') {
-                                logText = logText.replace(/\n/g, '\r\n');
-                            }
-
-                            term.write(logText);
-                        }
-                    } catch (e) {
-                        console.error("Failed to parse stream message", e);
-                    }
-                }
-            };
-
-            ws.onclose = () => {
-                setStatus('disconnected');
-            };
-
-            ws.onerror = (err) => {
-                console.error('WebSocket error:', err);
-                setStatus('disconnected');
-                term?.write('\r\n\x1b[31m[WebSocket Error - Check Console]\x1b[0m\r\n');
-            };
-
-            // Handle User Input (Only in Interactive Mode)
-            if (mode === 'interactive') {
                 term.onData((data) => {
                     if (ws?.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({ type: 'input', data: data }));
                     }
                 });
+
+            } else {
+                // Stream Mode
+                setStatus('connected');
+                // term.write(`\x1b[32m\r\n[Str eam Ready: ${nodeId}]\x1b[0m\r\n`);
             }
         };
 
-        // Resize Observer Logic
+        // Resize Observer
         resizeObserver = new ResizeObserver((entries) => {
+            // Safety: If component is unmounted, refs will be null
+            if (!terminalRef.current) return;
+
             for (const entry of entries) {
                 if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-                    if (!term) {
+                    if (!xtermRef.current) {
                         requestAnimationFrame(initTerminal);
-                    } else if (fitAddon) {
+                    } else if (fitAddonRef.current) {
                         requestAnimationFrame(() => {
+                            // Double Safety: Ensure terminal wasn't disposed while rAF was pending
+                            if (!xtermRef.current || !fitAddonRef.current) return;
+
                             try {
-                                fitAddon?.fit();
-                                if (mode === 'interactive' && ws?.readyState === WebSocket.OPEN) {
-                                    const dims = fitAddon?.proposeDimensions();
-                                    if (dims) ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+                                fitAddonRef.current.fit();
+                                if (mode === 'interactive' && wsRef.current?.readyState === WebSocket.OPEN) {
+                                    const dims = fitAddonRef.current.proposeDimensions();
+                                    if (dims) wsRef.current.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
                                 }
-                            } catch (e) { }
+                            } catch (e) {
+                                // Ignore fit errors during fast resizes
+                            }
                         });
                     }
                 }
@@ -244,11 +216,64 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
         return () => {
             resizeObserver?.disconnect();
             if (ws && ws.readyState === WebSocket.OPEN) ws.close();
-            term?.dispose();
             wsRef.current = null;
+            term?.dispose();
             xtermRef.current = null;
+            setIsReady(false); // Reset ready state on cleanup
         };
-    }, [mode, nodeId, shouldConnect]); // Re-run if mode changes (Run vs Edit) or Node ID changes
+    }, [mode, nodeId, shouldConnect]);
+
+    const hasHydratedRef = useRef(false);
+
+    // --- 2. LOG LISTENER & REHYDRATION EFFECT ---
+    useEffect(() => {
+        // FIX: Add isReady check. If terminal isn't created, we can't write to it.
+        if (!isReady || mode !== 'stream' || !nodeId || !shouldConnect) return;
+
+        const term = xtermRef.current;
+        if (!term) return; // Double safety check
+
+        // 1. Rehydrate
+        if (!hasHydratedRef.current && initialLogs && initialLogs.length > 0) {
+            initialLogs.forEach(log => {
+                let logText = log || "";
+                if (typeof logText === 'string') {
+                    logText = logText.replace(/\n/g, '\r\n');
+                }
+                term.write(logText);
+            });
+            hasHydratedRef.current = true;
+        }
+
+        // 2. Event Listener
+        const handleLogEvent = (e: Event) => {
+            const customEvent = e as CustomEvent;
+            let logText = customEvent.detail?.log || "";
+            if (typeof logText === 'string') {
+                logText = logText.replace(/\n/g, '\r\n');
+            }
+            term.write(logText);
+        };
+
+        window.addEventListener(`node-log-${nodeId}`, handleLogEvent);
+        return () => window.removeEventListener(`node-log-${nodeId}`, handleLogEvent);
+
+        // FIX: Add isReady to dependency array so this runs AFTER initialization
+    }, [mode, nodeId, shouldConnect, isReady]);
+
+    // --- 3. AUTO-CLEAR ON RUN ID CHANGE ---
+    useEffect(() => {
+        // Only clear if terminal exists
+        if (xtermRef.current && isReady) {
+            xtermRef.current.clear();
+            hasHydratedRef.current = false;
+        }
+    }, [runId, isReady]);
+
+    // Reset hydration when nodeId changes
+    useEffect(() => {
+        hasHydratedRef.current = false;
+    }, [nodeId]);
 
     return (
         <div className="flex flex-col h-full w-full bg-[#1e1e1e] rounded-b-md overflow-hidden relative">

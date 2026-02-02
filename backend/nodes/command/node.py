@@ -72,12 +72,12 @@ class CommandNode(FlowXNode):
                 # instead of hanging the server waiting for input.
                 final_cmd = command.replace("sudo", "sudo -n")
         
-        print(f"[CommandNode] Execution Started: {node_id}")
-        print(f"[CommandNode] CMD: {final_cmd}")
+        # print(f"[CommandNode] Execution Started: {node_id}")
+        # print(f"[CommandNode] CMD: {final_cmd}")
         
         # Emit the command to the terminal so the user sees it
         if emit:
-            print(f"[CommandNode] Emitting initial command to stream...")
+            # print(f"[CommandNode] Emitting initial command to stream...")
             await emit("node_log", {
                 "nodeId": node_id,
                 "log": f"\r\n\x1b[36m> {command}\x1b[0m\r\n", # Cyan color for command
@@ -85,13 +85,13 @@ class CommandNode(FlowXNode):
             })
 
         try:
-            print("[CommandNode] Spawning subprocess...")
+            # print("[CommandNode] Spawning subprocess...")
             process = await asyncio.create_subprocess_shell(
                 final_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            print(f"[CommandNode] PID: {process.pid}")
+            # print(f"[CommandNode] PID: {process.pid}")
 
             # 4. STREAMING PIPES
             output_buffer = []
@@ -105,7 +105,7 @@ class CommandNode(FlowXNode):
                     text = line.decode(errors='replace')
                     
                     # Debug print to backend console
-                    print(f"[CommandNode] {type_label}: {text.strip()}")
+                    # print(f"[CommandNode] {type_label}: {text.strip()}")
 
                     # Accumulate for final result
                     if type_label == "stdout":
@@ -122,7 +122,7 @@ class CommandNode(FlowXNode):
                         })
 
             # Run concurrently
-            print("[CommandNode] Waiting for pipes...")
+            # print("[CommandNode] Waiting for pipes...")
             await asyncio.gather(
                 stream_pipe(process.stdout, "stdout"), 
                 stream_pipe(process.stderr, "stderr")

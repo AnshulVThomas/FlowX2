@@ -1,5 +1,4 @@
-
-import { useRef, memo, useState, useCallback, useEffect } from 'react';
+import { useRef, memo, useState, useCallback, useMemo, useEffect } from 'react'; // Added useMemo
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Minimize2, Maximize2 } from 'lucide-react';
 import { generateCommand } from '../../services/api';
@@ -23,175 +22,105 @@ export type { CommandNodeData } from './types';
 const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>) => {
     const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
 
-    // Local State
+    // OPTIMIZATION 1: REMOVED REDUNDANT LOCAL STATE
+    // We use data.command, data.history, data.locked, data.ui_render directly.
+    // We ONLY keep local state for UI interactions (modals, prompt input).
+
+    // Local UI State
     const [prompt, setPrompt] = useState(data.prompt || '');
-    // Remove local command state that syncs on every keystroke
-    const [command, setCommand] = useState(data.command || '');
-
-    // History State
-    const [history, setHistory] = useState<CommandNodeData['data']['history']>(data.history || []);
-    const [showHistory, setShowHistory] = useState(false);
-    const [showInfo, setShowInfo] = useState(false);
-
-    // Helper to persist history (Max 5 items)
-    const updateHistory = (newHistory: typeof history) => {
-        if (!newHistory) return;
-        const truncated = newHistory.slice(0, 5);
-        setHistory(truncated);
-        updateNodeData(id, { history: truncated }, true);
-    };
-
-    // UI States
     const [isLoading, setIsLoading] = useState(false);
     const [isRunning, setIsRunning] = useState(false);
     const [isTerminalOpen, setIsTerminalOpen] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
+    const [showInfo, setShowInfo] = useState(false);
 
-    // Safety Lock State
-    // Default to data.locked if present, otherwise calculate from badge
-    const [isLocked, setIsLocked] = useState(data.locked ?? false);
+    // Tab State
+    const [activeTab, setActiveTab] = useState<'stream' | 'interactive'>('stream');
 
-    // Context & Data
-    const [uiRender, setUiRender] = useState(data.ui_render);
+    // Derived State (Cheap)
+    // Safety: Default locked status logic moved to Effect or Store actions. 
+    // Here we just read it.
+    const isLocked = data.locked ?? false;
+    const uiRender = data.ui_render;
+    const history = data.history || [];
 
-    // Auto-lock high risk commands (Sync with Data)
+    // --- AUTO-LOCK EFFECT ---
+    // Only runs when generation changes risk level
     useEffect(() => {
         const shouldLock = uiRender?.badge_color === 'red' || uiRender?.badge_color === 'yellow';
-
-        // If data.locked is undefined (new node/legacy), apply default logic
-        if (data.locked === undefined) {
-            setIsLocked(shouldLock);
-            updateNodeData(id, { locked: shouldLock });
-        }
-        // If uiRender changed (new generation), reset lock based on risk
-        // We track this by comparing current uiRender with previous? 
-        // Actually, just trust that if uiRender changes, we re-evaluate.
-        // We can't easily detect "change" vs "mount" here without more state.
-        // For simplicity: If badge implies lock, we FORCE lock on mount/change.
-        // User must unlock explicitly.
-
-        // BETTER APPROACH:
-        // Use a ref to track if it's user interaction vs system update?
-        // Let's stick to: If badge is red/yellow, we set locked=true.
-        // But what if user unlocked it?
-        // We only want to re-lock if the COMMAND changed (new generation).
-        // Since we don't track that granularity yet, let's just use the simple logic:
-        // If the badge says lock, and we aren't explicitly tracking "user unlocked", we lock.
-
         if (shouldLock && !data.locked) {
-            // It SHOULD be locked but isn't. 
-            // This might mean user unlocked it. 
-            // OR it might mean we just loaded and haven't synced yet.
-            // Let's assume if it's RED, it's ALWAYS locked on load/change until user unlocks.
-            // But we need to distinguish "User Unlocked" from "Not yet Locked".
-            // Let's just set it to matches `shouldLock` whenever uiRender changes key properties.
-        }
-    }, [uiRender?.badge_color, uiRender?.code_block]); // Only re-eval on generation changes
-
-    // Actually, simply: When generating, we call updateNodeData. We can set locked=true THERE.
-    // And here we just rely on data.locked.
-    // But for existing nodes or manual edits?
-
-    // Let's use the useEffect to INITIALIZE or RESET.
-    // Sync uiRender from props
-    useEffect(() => {
-        setUiRender(data.ui_render);
-    }, [data.ui_render]);
-
-    // Sync locked state from props
-    useEffect(() => {
-        if (data.locked !== undefined) {
-            setIsLocked(data.locked);
-        }
-    }, [data.locked]);
-
-    // Auto-lock high risk commands
-    // OPTIMIZATION: Only run this when uiRender changes (new generation), NOT when lock state changes.
-    // This allows the user to unlock it manually without fighting the effect.
-    useEffect(() => {
-        if (uiRender?.badge_color === 'red' || uiRender?.badge_color === 'yellow') {
-            // Only lock if we haven't already explicitly handled it?
-            // Simple logic: If new risky content arrives, lock it.
-            // We rely on this effect ONLY running when uiRender changes.
-            if (data.locked !== true) {
-                setIsLocked(true);
-                updateNodeData(id, { locked: true });
-            }
+            updateNodeData(id, { locked: true });
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [uiRender, id, updateNodeData]); // Exclude data.locked to prevent loop
+    }, [uiRender?.badge_color]); // Minimal dependency
 
-    // Initialize context string safely (Lazy)
-    const [contextString, setContextString] = useState(() => JSON.stringify(data.system_context || {}, null, 2));
-
-    // Only update local string if incoming data changes significantly and we ARE NOT editing it
+    // --- AUTO-TAB EFFECT ---
     useEffect(() => {
-        if (!showSettings) { // Don't overwrite if user is currently editing
-            setContextString(JSON.stringify(data.system_context || {}, null, 2));
+        if (data.execution_status === 'running' || data.execution_status === 'attention_required') {
+            setActiveTab('stream');
+            setIsTerminalOpen(true);
         }
-    }, [data.system_context, showSettings]);
+    }, [data.execution_status]);
 
-    const [jsonError, setJsonError] = useState('');
-    const [resultStatus, setResultStatus] = useState<'success' | 'error' | null>(() => {
-        // Restore status from last history item if available
-        if (data.history && data.history.length > 0) {
-            const last = data.history[0]; // history is unshifted, so 0 is latest
-            if (last.type === 'executed' && last.status) {
-                return last.status === 'success' ? 'success' : 'error';
-            }
-        }
-        return null;
-    });
+    // --- MEMOIZED HANDLERS (Prevents Child Re-renders) ---
 
-    const terminalRef = useRef<TerminalRef>(null);
+    // OPTIMIZATION 2: Stable Callback for Terminal
+    const onInteractiveComplete = useCallback((code: number) => {
+        setIsRunning(false);
+        if (code === 0) toast.success('Manual Command Executed');
+        else toast.error(`Exit Code: ${code}`);
 
-    // Safety: Ensure status matches history on mount/update (Fixes "Green Node" on init)
-    useEffect(() => {
-        if (!data.history || data.history.length === 0) {
-            setResultStatus(null);
-        } else {
-            // Optional: Sync status if history exists (double-check)
-            const last = data.history[0];
-            if (last.type === 'executed' && last.status && last.status !== 'pending') {
-                setResultStatus(last.status === 'success' ? 'success' : 'error');
-            }
-        }
-    }, [data.history]);
+        // Update History directly via Store
+        const newEntry = {
+            prompt: prompt || "Manual Execution", // Capture current prompt closure
+            command: data.command || "",         // Use fresh data
+            timestamp: Date.now(),
+            type: 'executed' as const,
+            runType: 'manual' as const,
+            status: code === 0 ? 'success' as const : 'failure' as const
+        };
 
-    // --- HANDLERS ---
+        // We must calculate new history based on LATEST data prop, not stale closure
+        // However, 'data' in deps might be stale if we don't include it. 
+        // Better strategy: Pass a functional update if we had local state, 
+        // but here we just read data.history which is updated via props.
+        const currentHistory = data.history || [];
+        const newHistory = [newEntry, ...currentHistory].slice(0, 5);
 
-    // Memoize handlers to prevent prop thrashing
+        updateNodeData(id, { history: newHistory }, true);
+    }, [id, prompt, data.command, data.history, updateNodeData]);
+
     const handleRun = useCallback(() => {
         setIsRunning(true);
-
-        // Log to History
+        // Optimistic History Update (Pending)
         const newEntry = {
             prompt: prompt || 'Manual Execution',
-            command: command,
+            command: data.command || "",
             timestamp: Date.now(),
             type: 'executed' as const,
             status: 'pending' as const
         };
-        updateHistory([newEntry, ...(history || [])]);
+        const newHistory = [newEntry, ...(data.history || [])].slice(0, 5);
+        updateNodeData(id, { history: newHistory }, true);
 
+        // Small timeout to allow UI to settle before Xterm takes over
         setTimeout(() => {
             if (terminalRef.current) {
-                terminalRef.current.runCommand(command);
+                terminalRef.current.runCommand(data.command || "");
             }
-        }, 100);
-    }, [command, prompt, history]); // Depends on current command and prompt
+        }, 50);
+    }, [id, prompt, data.command, data.history, updateNodeData]);
 
     const handleStop = useCallback(() => {
         setIsRunning(false);
-        if (terminalRef.current) {
-            terminalRef.current.stop();
-            toast.info('Interrupt signal sent');
-        }
+        if (terminalRef.current) terminalRef.current.stop();
+        toast.info('Interrupt signal sent');
     }, []);
 
     const handleCommandUpdate = useCallback((newCmd: string) => {
-        setCommand(newCmd);
+        // Direct Store Update (Single Source of Truth)
         updateNodeData(id, { command: newCmd });
     }, [id, updateNodeData]);
 
@@ -201,25 +130,19 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
         try {
             const response = await generateCommand(prompt, id, data.system_context || {});
 
-            // Batch updates
-            setUiRender(response.ui_render);
-            setCommand(response.ui_render.code_block);
-
+            // Single Batch Update
             updateNodeData(id, {
                 prompt: prompt,
                 command: response.ui_render.code_block,
-                ui_render: response.ui_render
+                ui_render: response.ui_render,
+                // Add to history immediately
+                history: [{
+                    prompt,
+                    command: response.ui_render.code_block,
+                    timestamp: Date.now(),
+                    type: 'generated'
+                }, ...(data.history || [])].slice(0, 5)
             }, true);
-
-            // Add to History
-            const newEntry = {
-                prompt,
-                command: response.ui_render.code_block,
-                timestamp: Date.now(),
-                type: 'generated' as const
-            };
-            // @ts-ignore - history typing
-            updateHistory([newEntry, ...(history || [])]);
 
             toast.success('Command generated');
         } catch (error) {
@@ -230,144 +153,128 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
         }
     };
 
+    // OPTIMIZATION 3: Memoized Context String
+    // We only re-calculate this string when the modal opens or data changes
+    const contextString = useMemo(() =>
+        JSON.stringify(data.system_context || {}, null, 2),
+        [data.system_context]);
+
+    const [localContextString, setLocalContextString] = useState(contextString);
+
+    // Sync local context string only when opening settings (optional, logic simplifies to just using local state when editing)
+    useEffect(() => {
+        if (!showSettings) setLocalContextString(contextString);
+    }, [contextString, showSettings]);
+
     const handleSaveContext = () => {
         try {
-            const parsed = JSON.parse(contextString);
-            setJsonError('');
+            const parsed = JSON.parse(localContextString);
+            // setJsonError(''); // Not defined in User snippet, but used? 
+            // Wait, user provided snippet calls `setJsonError`. 
+            // BUT `setJsonError` is NOT defined in the user snippet's component body.
+            // Oh, I see `[jsonError, setJsonError]` is MISSING from the user snippet component body!
+            // I must add it back or the code will crash.
+            // Let me check the user snippet again.
+            // ...
+            // const [prompt, setPrompt] = useState(data.prompt || '');
+            // const [isLoading, setIsLoading] = useState(false);
+            // ...
+            // It seems user forgot to include `jsonError` state in their snippet?
+            // "Optimized CommandNode/index.tsx" snippet in prompt:
+            // It does NOT have `const [jsonError, setJsonError] = useState('');`
+            // But it calls `setJsonError` in `handleSaveContext`.
+            // I should ADD it.
+
+            // Also check `updateNodeData` import? It's mapped from store.
+            // It uses `updateNodeData` from `useWorkflowStore`.
+
             setShowSettings(false);
             updateNodeData(id, { system_context: parsed }, true);
             toast.success('Context saved');
         } catch (e) {
             setJsonError('Invalid JSON');
+            toast.error('Invalid JSON');
         }
     };
 
-    // --- TABS & TERMINAL STATE ---
-    const [activeTab, setActiveTab] = useState<'stream' | 'interactive'>('stream');
+    // I will include the missing state for completeness if possible, or just fix the usage.
+    // The user's snippet uses `setJsonError`. So I MUST define it.
 
-    // Auto-Switch to Output (Stream) when running
-    useEffect(() => {
-        const status = data.execution_status;
-        if (status === 'running' || status === 'attention_required') {
-            setActiveTab('stream');
-            setIsTerminalOpen(true); // Force open if closed
-        }
-    }, [data.execution_status]);
+    const [jsonError, setJsonError] = useState('');
 
-    // Connect Stream if: We are running, or we have finished (to show logs)
-    const shouldConnectStream = ['running', 'completed', 'failed', 'attention_required'].includes(data.execution_status || '');
+    // --- VIEW LOGIC ---
+    const terminalRef = useRef<TerminalRef>(null);
 
-    // Connect Interactive if: User explicitly clicked the tab
-    const shouldConnectInteractive = activeTab === 'interactive';
-
-    const handleTerminalClose = useCallback(() => {
-        setIsTerminalOpen(false);
-        setIsExpanded(false);
-    }, []);
-
-    // Subscribe to validation status
-
-    // Subscribe to validation status for ring styling and shield
+    // Validation Status Subscription
     const validationStatus = useWorkflowStore((state) => state.validationStatus[id]);
     const validationErrors = useWorkflowStore((state) => state.validationErrors?.[id]);
 
-    // --- STYLES ---
+    // Border Logic (Memoized or just computed)
     let ringClass = "ring-1 ring-stone-200";
     let shadowClass = "shadow-lg shadow-stone-200/50";
 
+    // ... (Keep your styling logic, it's efficient enough) ...
+    // Note: data.execution_status access is direct now.
     if (selected) {
-        // Priority 1: Selection (Blue) - Overrides everything as requested
         ringClass = "ring-2 ring-blue-500";
         shadowClass = "shadow-xl shadow-blue-500/30";
     } else if (isRunning || data.execution_status === 'running') {
-        // Priority 2: Running (Pulse Indigo)
-        ringClass = "ring-2 ring-indigo-500 animate-pulse";
-        shadowClass = "shadow-xl shadow-indigo-500/30";
+        // Match the Purple/Fuchsia border animation
+        ringClass = "ring-1 ring-purple-500/50";
+        shadowClass = "shadow-xl shadow-purple-500/20";
     } else if (data.execution_status === 'attention_required') {
-        // Priority 3: Attention Required (Yellow Pulse)
         ringClass = "ring-2 ring-amber-500 animate-pulse";
         shadowClass = "shadow-xl shadow-amber-500/30";
     } else if (validationStatus === 'VALIDATION_FAILED') {
-        // Priority 4: Validation Failed (Yellow Pulse)
-        // Must check this BEFORE execution status so invalid config overrides old results
         ringClass = "ring-2 ring-amber-500 animate-pulse";
         shadowClass = "shadow-xl shadow-amber-500/30";
-    } else if (data.execution_status === 'failed' || resultStatus === 'error') {
-        // Priority 5: Error (Red)
+    } else if (data.execution_status === 'failed') {
         ringClass = "ring-2 ring-rose-500";
         shadowClass = "shadow-xl shadow-rose-500/20";
-    } else if (data.execution_status === 'completed' || resultStatus === 'success') {
-        // Priority 6: Success (Green)
+    } else if (data.execution_status === 'completed') {
         ringClass = "ring-2 ring-emerald-500";
         shadowClass = "shadow-xl shadow-emerald-500/20";
     }
 
-    // Optimization: 'visible' + 'invisible' + pointer events + z-index
-    // Keeps Xterm "warm" but hidden from view/clicks
     const terminalVisibilityClass = isTerminalOpen
         ? 'opacity-100 visible pointer-events-auto z-20'
         : 'opacity-0 invisible pointer-events-none -z-10';
 
-    // --- STABLE HANDLERS ---
-
-    const toggleSettings = useCallback(() => {
-        setShowSettings(prev => !prev);
-        setShowHistory(false);
-    }, []);
-
-    const toggleHistory = useCallback(() => {
-        setShowHistory(prev => !prev);
-        setShowSettings(false);
-    }, []);
-
-    const toggleTerminal = useCallback((val: boolean) => {
-        setIsTerminalOpen(val);
-        setIsExpanded(val);
-    }, []);
-
-    const updateLocked = useCallback((val: boolean) => {
-        setIsLocked(val);
-        updateNodeData(id, { locked: val });
-    }, [id, updateNodeData]);
-
+    // Toggle Handlers
+    const toggleSettings = useCallback(() => { setShowSettings(p => !p); setShowHistory(false); }, []);
+    const toggleHistory = useCallback(() => { setShowHistory(p => !p); setShowSettings(false); }, []);
+    const toggleTerminal = useCallback((val: boolean) => { setIsTerminalOpen(val); setIsExpanded(val); }, []);
+    const handleTerminalClose = useCallback(() => { setIsTerminalOpen(false); setIsExpanded(false); }, []);
+    const updateLocked = useCallback((val: boolean) => updateNodeData(id, { locked: val }), [id, updateNodeData]);
     const updateShowInfo = useCallback((val: boolean) => setShowInfo(val), []);
 
+    // Helper for terminal connection
+    const shouldConnectStream = ['running', 'completed', 'failed', 'attention_required'].includes(data.execution_status || '');
+    const shouldConnectInteractive = activeTab === 'interactive';
+
     return (
-        // OPTIMIZATION 4: Hardware Acceleration hint
         <div className={`relative group transition-[width,height,box-shadow,ring-color] duration-300 ease-in-out nowheel will-change-[width,height] ${isExpanded ? 'w-[800px] h-[500px] z-50' : 'min-w-[420px] h-auto'}`}>
 
-            {/* Shield Icon for Validation Status */}
-            <ValidationShield
-                status={validationStatus}
-                errors={validationErrors}
-                className="absolute -top-3 -right-3 z-50 transition-all duration-300 transform hover:scale-110"
-            />
+            <ValidationShield status={validationStatus} errors={validationErrors} className="absolute -top-3 -right-3 z-50 transition-all duration-300 transform hover:scale-110" />
 
-            {/* Resume Overlay (Tier 3 Execution) */}
             {data.execution_status === 'attention_required' && data.thread_id && (
-                <ResumeOverlay
-                    threadId={data.thread_id}
-                    workflowId={useWorkflowStore.getState().activeId || ''} // Direct access or hook? 
-                // Better to use hook inside component or pass as prop?
-                // ResumeOverlay can fetch it if we pass nothing? 
-                // Let's rely on store.getState() for now or add a hook call above.
-                />
+                <ResumeOverlay threadId={data.thread_id} workflowId={useWorkflowStore.getState().activeId || ''} />
             )}
 
-            {/* OPTIMIZATION 3: Conditional Rendering. */}
             {isLoading && (
                 <div className="absolute -inset-[3px] rounded-xl overflow-hidden pointer-events-none">
                     <div className="absolute inset-[-100%] animate-[spin_4s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#F1F5F9_0%,#6366f1_50%,#a855f7_100%)]" />
                 </div>
             )}
 
-            <div className={`
-                relative flex flex-col bg-white rounded-xl overflow-hidden h-full
-                ${ringClass} ${shadowClass}
-                transition-[box-shadow,ring-color] duration-300
-            `}>
+            {(isRunning || data.execution_status === 'running') && (
+                <div className="absolute -inset-[5px] rounded-xl overflow-hidden pointer-events-none">
+                    <div className="absolute inset-[-100%] animate-[spin_3s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#F1F5F9_0%,#a855f7_50%,#d946ef_100%)]" />
+                </div>
+            )}
 
-                {/* --- HEADER --- */}
+            <div className={`relative flex flex-col bg-white rounded-xl overflow-hidden h-full ${ringClass} ${shadowClass} transition-[box-shadow,ring-color] duration-300`}>
+
                 <Header
                     id={id}
                     isLoading={isLoading}
@@ -384,98 +291,63 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                     setShowSettings={toggleSettings}
                 />
 
-                {/* --- BODY --- */}
                 <div className="relative flex-grow bg-[#1e1e1e] min-h-[160px] flex flex-col overflow-hidden">
+                    {/* Overlays */}
+                    {showInfo && !showSettings && <InfoOverlay uiRender={uiRender} onClose={() => setShowInfo(false)} />}
 
-                    {/* Info Overlay */}
-                    {showInfo && !showSettings && (
-                        <InfoOverlay
-                            uiRender={uiRender}
-                            onClose={() => setShowInfo(false)}
-                        />
-                    )}
-
-                    {/* Settings Overlay */}
                     {showSettings && (
                         <SettingsView
                             jsonError={jsonError}
-                            contextString={contextString}
-                            setContextString={setContextString}
+                            contextString={localContextString}
+                            setContextString={setLocalContextString}
                             handleSaveContext={handleSaveContext}
                             onClose={() => setShowSettings(false)}
                         />
                     )}
 
-                    {/* History Overlay */}
                     {showHistory && (
                         <HistoryView
-                            history={history || []}
+                            history={history}
                             id={id}
                             updateNodeData={updateNodeData}
                             setPrompt={setPrompt}
-                            setCommand={setCommand}
+                            setCommand={(cmd) => updateNodeData(id, { command: cmd })} // Simple inline update
                             onClose={() => setShowHistory(false)}
                         />
                     )}
 
-
-
-                    {/* Terminal View */}
+                    {/* Dual Terminal View */}
                     <div className={`absolute inset-0 bg-[#1e1e1e] z-20 flex flex-col transition-opacity duration-200 ${terminalVisibilityClass}`}>
 
-                        {/* --- NEW TAB BAR HEADER --- */}
+                        {/* Tab Bar Header */}
                         <div className="h-8 bg-[#252526] border-b border-black/20 flex items-center justify-between select-none flex-shrink-0">
-
-                            {/* Left: Tabs */}
                             <div className="flex h-full">
-                                {/* Output Tab */}
                                 <button
                                     onClick={() => setActiveTab('stream')}
-                                    className={`
-                                        flex items-center gap-2 px-4 h-full text-[10px] font-medium transition-colors
-                                        ${activeTab === 'stream'
-                                            ? 'bg-[#1e1e1e] text-white border-t-2 border-indigo-500'
-                                            : 'text-gray-500 hover:text-gray-300 hover:bg-[#2a2a2b]'}
-                                    `}
+                                    className={`flex items-center gap-2 px-4 h-full text-[10px] font-medium transition-colors ${activeTab === 'stream' ? 'bg-[#1e1e1e] text-white border-t-2 border-indigo-500' : 'text-gray-500 hover:text-gray-300 hover:bg-[#2a2a2b]'}`}
                                 >
                                     <div className={`w-1.5 h-1.5 rounded-full ${data.execution_status === 'running' ? 'bg-indigo-500 animate-pulse' : 'bg-gray-400'}`} />
                                     OUTPUT
                                 </button>
-
-                                {/* Terminal Tab */}
                                 <button
                                     onClick={() => setActiveTab('interactive')}
-                                    className={`
-                                        flex items-center gap-2 px-4 h-full text-[10px] font-medium transition-colors
-                                        ${activeTab === 'interactive'
-                                            ? 'bg-[#1e1e1e] text-white border-t-2 border-emerald-500'
-                                            : 'text-gray-500 hover:text-gray-300 hover:bg-[#2a2a2b]'}
-                                    `}
+                                    className={`flex items-center gap-2 px-4 h-full text-[10px] font-medium transition-colors ${activeTab === 'interactive' ? 'bg-[#1e1e1e] text-white border-t-2 border-emerald-500' : 'text-gray-500 hover:text-gray-300 hover:bg-[#2a2a2b]'}`}
                                 >
                                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                                     TERMINAL
                                 </button>
                             </div>
-
-                            {/* Right: Window Controls */}
                             <div className="flex items-center px-3 gap-2">
-                                <span className="mr-2 text-[9px] text-gray-600 font-mono">
-                                    {activeTab === 'stream' ? 'READ-ONLY' : 'BASH'}
-                                </span>
+                                <span className="mr-2 text-[9px] text-gray-600 font-mono">{activeTab === 'stream' ? 'READ-ONLY' : 'BASH'}</span>
                                 <div className="flex gap-1.5">
                                     <button onClick={handleTerminalClose} className="w-2.5 h-2.5 rounded-full bg-[#FF5F56] hover:opacity-80 flex items-center justify-center text-transparent hover:text-black/50 text-[8px] font-bold">✕</button>
-                                    <button onClick={() => setIsExpanded(!isExpanded)} className="w-2.5 h-2.5 rounded-full bg-[#27C93F] hover:opacity-80 flex items-center justify-center text-transparent hover:text-black/50 text-[6px] font-bold">
-                                        {isExpanded ? <Minimize2 size={6} /> : <Maximize2 size={6} />}
-                                    </button>
+                                    <button onClick={() => setIsExpanded(!isExpanded)} className="w-2.5 h-2.5 rounded-full bg-[#27C93F] hover:opacity-80 flex items-center justify-center text-transparent hover:text-black/50 text-[6px] font-bold">{isExpanded ? <Minimize2 size={6} /> : <Maximize2 size={6} />}</button>
                                 </div>
                             </div>
                         </div>
 
-                        {/* --- DUAL TERMINAL CONTAINER --- */}
+                        {/* Terminals Container */}
                         <div className="flex-grow relative overflow-hidden nodrag">
-
-                            {/* 1. STREAM TERMINAL (Workflow Logs) */}
-                            {/* Visibility: Hidden prevents rendering but keeps buffer alive */}
                             <div className={`absolute inset-0 bg-[#1e1e1e] ${activeTab === 'stream' ? 'z-10 visible' : 'z-0 invisible'}`}>
                                 <TerminalComponent
                                     hideToolbar={true}
@@ -483,11 +355,10 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                                     mode="stream"
                                     nodeId={id}
                                     shouldConnect={shouldConnectStream}
-                                // No onCommandComplete here because the store handles workflow status
+                                    initialLogs={data.logs}
+                                    runId={data.thread_id} // Pass thread_id to force clear on new run
                                 />
                             </div>
-
-                            {/* 2. INTERACTIVE TERMINAL (Manual Debug) */}
                             <div className={`absolute inset-0 bg-[#1e1e1e] ${activeTab === 'interactive' ? 'z-10 visible' : 'z-0 invisible'}`}>
                                 <TerminalComponent
                                     ref={terminalRef}
@@ -496,34 +367,12 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                                     mode="interactive"
                                     nodeId={id}
                                     shouldConnect={shouldConnectInteractive}
-                                    onCommandComplete={(code) => {
-                                        // Manual runs handled locally
-                                        setIsRunning(false);
-                                        if (code === 0) {
-                                            toast.success('Manual Command Executed');
-                                        } else {
-                                            toast.error(`Exit Code: ${code}`);
-                                        }
-
-                                        // Optional: Add manual run to history logic here
-                                        const newHistory = [...(history || [])];
-                                        newHistory.unshift({
-                                            prompt: prompt || "Manual Execution",
-                                            command: command || "",
-                                            timestamp: Date.now(),
-                                            type: 'executed',
-                                            runType: 'manual',
-                                            status: code === 0 ? 'success' : 'failure'
-                                        });
-                                        updateHistory(newHistory);
-                                    }}
+                                    onCommandComplete={onInteractiveComplete} // PASS MEMOIZED CALLBACK
                                 />
                             </div>
-
                         </div>
                     </div>
 
-                    {/* Editor View */}
                     <div className={`flex flex-col flex-grow ${isTerminalOpen ? 'invisible' : 'visible'}`}>
                         <div className="relative flex-grow bg-[#1e1e1e] group overflow-hidden flex flex-col">
                             <div className="h-8 bg-gradient-to-b from-[#2a2a2a] to-[#1e1e1e] flex items-center px-3 border-b border-white/5 z-10 flex-shrink-0">
@@ -533,17 +382,14 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                                     <div className="w-2.5 h-2.5 rounded-full bg-[#27C93F]" />
                                 </div>
                             </div>
-
-                            {/* OPTIMIZATION 4: 'nodrag' is critical here */}
                             <CommandEditor
-                                initialValue={command}
+                                initialValue={data.command || ""} // Use data directly
                                 onUpdate={handleCommandUpdate}
                             />
                         </div>
                     </div>
                 </div>
 
-                {/* --- FOOTER --- */}
                 <Footer
                     isTerminalOpen={isTerminalOpen}
                     isLoading={isLoading}
@@ -565,13 +411,12 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
     );
 };
 
-// --- OPTIMIZATION 1: Custom Compare Function ---
+// --- COMPARATOR ---
 function propsAreEqual(prev: NodeProps<CommandNodeData>, next: NodeProps<CommandNodeData>) {
     return (
         prev.selected === next.selected &&
         prev.id === next.id &&
-        prev.dragging === next.dragging && // Import optimization
-        // Deep compare specific data fields
+        prev.dragging === next.dragging &&
         prev.data.command === next.data.command &&
         prev.data.prompt === next.data.prompt &&
         prev.data.locked === next.data.locked &&
@@ -579,11 +424,12 @@ function propsAreEqual(prev: NodeProps<CommandNodeData>, next: NodeProps<Command
         prev.data.ui_render?.code_block === next.data.ui_render?.code_block &&
         prev.data.execution_status === next.data.execution_status &&
         prev.data.thread_id === next.data.thread_id &&
-        // Shallow check for history array itself (store updates create new array refs)
         prev.data.history === next.data.history
+        // Note: We deliberately do NOT check data.logs here.
+        // If only logs update, the Node Container doesn't need to re-render.
+        // The TerminalComponent listens to window events for log updates.
     );
 }
 
-// OPTIMIZATION 5: Strict Memoization with Custom Comparator
 export const CommandNode = memo(CommandNodeComponent, propsAreEqual);
 export default CommandNode;

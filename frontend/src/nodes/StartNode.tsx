@@ -1,6 +1,6 @@
 import { memo, useState, useCallback } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { Play, Loader2 } from 'lucide-react';
+import { Play, Loader2, Square } from 'lucide-react';
 import { useWorkflowStore } from '../store/useWorkflowStore';
 import { ValidationShield } from '../components/ValidationShield';
 import { toast } from 'sonner';
@@ -67,6 +67,13 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
     const handleRun = useCallback(async (e: React.MouseEvent) => {
         e.stopPropagation();
 
+        // If already running (isValidating is simplistic proxy for now), try to cancel
+        if (isValidating) {
+            toast.info('Requesting Cancellation...');
+            await useWorkflowStore.getState().abortWorkflow();
+            return;
+        }
+
         setIsValidating(true);
         try {
             // Await both to ensure sequentiality
@@ -74,20 +81,20 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
             await validateGraph();
 
             // Execute Tier 3 Backend
-            // We access store directly or via hook props?
-            // Since we are inside component, we can use the selector below
-            // Actually, we didn't select executeGraph yet. 
-            // We should use store.getState().executeGraph() or add it to selectors.
             await useWorkflowStore.getState().executeGraph();
 
             toast.success('Execution Started');
         } catch (error) {
             toast.error('Execution failed');
+            setIsValidating(false); // Reset immediately on error
         } finally {
-            // Keep animation for a moment for UX visibility
-            setTimeout(() => setIsValidating(false), 800);
+            // We DON'T reset validating here automatically if we want it to stay "Running"
+            // But currently 'executeGraph' is awaited until completion?
+            // If executeGraph returns quickly (fire-and-forget from frontend persp), we need global state.
+            // If executeGraph waits for process, then this finally block runs at END of process.
+            setIsValidating(false);
         }
-    }, [saveActiveWorkflow, validateGraph]);
+    }, [saveActiveWorkflow, validateGraph, isValidating]);
 
     // Recalculate styles only when relevant props change
     const styles = getStatusStyles(data.status, selected);
@@ -112,13 +119,16 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
                     group rounded-full w-10 h-10 flex justify-center items-center 
                     border shadow-sm shrink-0 cursor-pointer transition-all duration-300
                     ${isValidating
-                        ? 'bg-amber-100 border-amber-200 text-amber-600 animate-spin'
-                        : 'bg-blue-50 border-blue-100 hover:bg-blue-500'
+                        ? 'bg-red-50 border-red-100 hover:bg-red-500' // Red for cancel
+                        : 'bg-blue-50 border-blue-100 hover:bg-blue-500' // Blue for run
                     }
                 `}
             >
                 {isValidating ? (
-                    <Loader2 size={20} />
+                    <Square
+                        size={16}
+                        className="text-red-500 fill-red-500/20 group-hover:text-white group-hover:fill-white"
+                    />
                 ) : (
                     <Play
                         size={20}
@@ -132,7 +142,7 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
                     {data.name || 'Start'}
                 </span>
                 <span className={`text-xs font-bold tracking-wide uppercase mt-0.5 ${isValidating ? 'text-amber-500' : styles.textClass}`}>
-                    {isValidating ? 'VERIFYING...' : (data.status || 'IDLE')}
+                    {isValidating ? 'RUNNING... (CLICK TO STOP)' : (data.status || 'IDLE')}
                 </span>
             </div>
 

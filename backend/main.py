@@ -1,10 +1,10 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from database.connection import db
 from models.workflow import Workflow, WorkflowSummary
 from contextlib import asynccontextmanager
-from typing import List
+from typing import List, Dict
 from nodes.command.schema import GenerateCommandRequest, UIResponse, UIRender, ExecutionMetadata
 from app.core.session_manager import PtySession
 from engine.builder import GraphBuilder
@@ -57,7 +57,7 @@ try:
     
     @app.exception_handler(PyMongoError)
     async def mongodb_exception_handler(request: Request, exc: PyMongoError):
-        print(f"MongoDB error: {exc}")
+        # print(f"MongoDB error: {exc}") # Still useful for critical db errors? Maybe keep or log to stderr
         return JSONResponse(
             status_code=503,
             content={"detail": "Database connection error", "error": str(exc)}
@@ -82,7 +82,7 @@ class ConnectionManager:
             try:
                 await connection.send_text(message)
             except Exception as e:
-                print(f"Broadcast error: {e}")
+                pass # print(f"Broadcast error: {e}")
 
 manager = ConnectionManager()
 
@@ -108,7 +108,7 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.websocket("/ws/terminal")
 async def websocket_terminal_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("WebSocket Terminal Connected")
+    # print("WebSocket Terminal Connected")
     
     # Create PTY Session (defaults to bash)
     # TODO: In future, might accept a command via query param or initial message
@@ -129,7 +129,8 @@ async def websocket_terminal_endpoint(websocket: WebSocket):
                 # We'll send text.
                 await websocket.send_text(data.decode(errors="ignore"))
         except Exception as e:
-            print(f"PTY Reader Error: {e}")
+            # print(f"PTY Reader Error: {e}")
+            pass
             
     # Start reader task
     reader_task = asyncio.create_task(pty_reader())
@@ -147,7 +148,7 @@ async def websocket_terminal_endpoint(websocket: WebSocket):
                     cols = message.get("cols", 80)
                     rows = message.get("rows", 24)
                     session.resize(rows, cols)
-                    print(f"Resized PTY to {rows}x{cols}")
+                    # print(f"Resized PTY to {rows}x{cols}")
                 elif isinstance(message, dict) and message.get("type") == "input":
                     # Structured input
                     data = message.get("data", "")
@@ -160,7 +161,7 @@ async def websocket_terminal_endpoint(websocket: WebSocket):
                 session.write(message_text.encode())
                 
     except WebSocketDisconnect:
-        print("Terminal WebSocket Disconnected")
+        pass # print("Terminal WebSocket Disconnected")
     except Exception as e:
         print(f"WebSocket Error: {e}")
     finally:
@@ -292,12 +293,63 @@ async def generate_command_endpoint(request: GenerateCommandRequest):
 
 # --- EXECUTION ENGINE API (Tier 3) ---
 
+# Global registry for active execution tasks
+# Maps thread_id -> asyncio.Task
+active_executions: Dict[str, asyncio.Task] = {}
+
 @app.post("/api/v1/workflow/execute")
-async def execute_workflow(workflow_data: dict):
+async def execute_workflow(workflow_data: dict, background_tasks: BackgroundTasks = None):
     """
     Compiles and starts a workflow execution.
     Returns the thread_id for tracking.
     """
+    # Debug: Print Workflow Structure
+    print("\n" + "="*50)
+    print(f"🚀 Executing Workflow: {workflow_data.get('id', 'Unknown ID')}")
+    print("="*50)
+    
+    nodes = {n['id']: n.get('data', {}).get('name', n['id']) for n in workflow_data.get('nodes', [])}
+    edges = workflow_data.get('edges', [])
+    
+    print("Structure:")
+    if not edges:
+        print("  [Single Node Execution (or Disconnected)]")
+    
+    for edge in edges:
+        source_id = edge['source']
+        target_id = edge['target']
+        
+        # Get Names
+        source_name = nodes.get(source_id, source_id)
+        target_name = nodes.get(target_id, target_id)
+        
+        # Get Commands
+        source_cmd = ""
+        target_cmd = ""
+        
+        # Find node data for command
+        for n in workflow_data.get('nodes', []):
+            if n['id'] == source_id:
+                source_cmd = n.get('data', {}).get('command', '')
+            if n['id'] == target_id:
+                target_cmd = n.get('data', {}).get('command', '')
+
+        # Format with Command if available
+        # Truncate command for display
+        def fmt_node(name, cmd):
+            if cmd:
+                cmd_short = (cmd[:30] + '...') if len(cmd) > 30 else cmd
+                return f"{name} ({cmd_short})"
+            return name
+
+        source_display = fmt_node(source_name, source_cmd)
+        target_display = fmt_node(target_name, target_cmd)
+
+        behavior = edge.get('data', {}).get('behavior', 'conditional')
+        arrow = "-->" if behavior == "conditional" else ("==>" if behavior == "force" else "-!->")
+        print(f"  [{source_display}] {arrow} [{target_display}]")
+    print("="*50 + "\n")
+
     builder = GraphBuilder(checkpointer=checkpointer)
     graph = builder.build(workflow_data)
     
@@ -310,7 +362,9 @@ async def execute_workflow(workflow_data: dict):
         import json
         # Wrap in expected format
         try:
-            payload = json.dumps({"type": event, "data": data})
+            # Inject thread_id so frontend knows which run this belongs to immediately
+            data_with_context = {**data, "thread_id": thread_id}
+            payload = json.dumps({"type": event, "data": data_with_context})
             await manager.broadcast(payload)
         except Exception as e:
             print(f"Emit error: {e}")
@@ -324,35 +378,61 @@ async def execute_workflow(workflow_data: dict):
         "execution_status": "RUNNING",
         "current_node_id": "START"
     }
-    
-    try:
-        final_state = await graph.ainvoke(initial_state, config=config)
-        return {
-            "thread_id": thread_id, 
-            "status": final_state.get("execution_status", "COMPLETED"),
-            "logs": final_state.get("logs", []),
-            "results": final_state.get("results", {})
-        }
-    except Exception as e:
-        # Check for GraphInterrupt (which wraps NodeInterrupt)
-        if type(e).__name__ == "GraphInterrupt":
-            # The execution paused appropriately.
-            # We should return the current state, which should reflect the pause?
-            # Or manually return 'ATTENTION_REQUIRED'.
-            print(f"Workflow Paused/Interrupted: {e}")
-            
-            # Retrieve the latest state to get logs up to this point
-            current_state = await graph.aget_state(config)
-            
+
+    # Wrapper to run execution and handle registration
+    async def run_execution():
+        try:
+            final_state = await graph.ainvoke(initial_state, config=config)
             return {
-                "thread_id": thread_id,
-                "status": "ATTENTION_REQUIRED",
-                "logs": current_state.values.get("logs", []),
-                "results": current_state.values.get("results", {}),
-                "error": str(e)
+                "thread_id": thread_id, 
+                "status": final_state.get("execution_status", "COMPLETED"),
+                "logs": final_state.get("logs", []),
+                "results": final_state.get("results", {})
             }
-            
-        return {"status": "FAILED", "error": str(e), "thread_id": thread_id}
+        except asyncio.CancelledError:
+            print(f"Workflow Execution Cancelled: {thread_id}")
+            # Emit cancellation event
+            await emit_to_frontend("node_status", {"nodeId": "system", "status": "cancelled"}) 
+            return {"status": "CANCELLED", "thread_id": thread_id}
+        except Exception as e:
+            # Check for GraphInterrupt (which wraps NodeInterrupt)
+            if type(e).__name__ == "GraphInterrupt":
+                print(f"Workflow Paused/Interrupted: {e}")
+                
+                # Retrieve the latest state to get logs up to this point
+                current_state = await graph.aget_state(config)
+                
+                return {
+                    "thread_id": thread_id,
+                    "status": "ATTENTION_REQUIRED",
+                    "logs": current_state.values.get("logs", []),
+                    "results": current_state.values.get("results", {}),
+                    "error": str(e)
+                }
+                
+            return {"status": "FAILED", "error": str(e), "thread_id": thread_id}
+        finally:
+            # Cleanup registry
+            if thread_id in active_executions:
+                del active_executions[thread_id]
+
+    # Register Task
+    task = asyncio.create_task(run_execution())
+    active_executions[thread_id] = task
+    
+    # Wait for completion (or return early if we wanted async fire-and-forget, but user usually awaits result)
+    # The current frontend awaits the response, so we await the task here.
+    return await task
+
+@app.post("/api/v1/workflow/cancel/{thread_id}")
+async def cancel_workflow(thread_id: str):
+    if thread_id in active_executions:
+        task = active_executions[thread_id]
+        task.cancel()
+        return {"status": "success", "message": "Cancellation signal sent"}
+    else:
+        # It might have already finished
+        return {"status": "ignored", "message": "Execution not found or already completed"}
 
 @app.post("/api/v1/workflow/resume/{thread_id}")
 async def resume_workflow(thread_id: str, payload: dict):
@@ -388,7 +468,9 @@ async def resume_workflow(thread_id: str, payload: dict):
             payload = json.dumps({"type": event, "data": data})
             await manager.broadcast(payload)
         except Exception as e:
-            print(f"Emit error: {e}")
+            await manager.broadcast(payload)
+        except Exception as e:
+            pass # print(f"Emit error: {e}")
 
     config = {
         "configurable": {

@@ -67,9 +67,13 @@ class GraphBuilder:
                             "status": "running"
                         })
 
-                    print(f"--- [GraphBuilder] Executing Node: {_node_id} ---")
+                    import datetime
+                    start_time = datetime.datetime.now().strftime("%H:%M:%S")
+                    cmd_str = _node_data.get('command', 'No Command')
+                    print(f"[{start_time}] ⚡ Running Node {_node_id}: {cmd_str}")
+
                     result = await instance.execute(execution_state, _node_data)
-                    print(f"--- [GraphBuilder] Node {_node_id} COMPLETED. Status: {result.get('status')} ---")
+                    # print(f"--- [GraphBuilder] Node {_node_id} COMPLETED. Status: {result.get('status')} ---")
                     
                     # EMIT STATUS: COMPLETED/FAILED
                     if emit_event:
@@ -86,28 +90,21 @@ class GraphBuilder:
                     }
                     
                     # Update state (Merge semantics)
-                    # We need to retrieve existing results first? 
-                    # LangGraph merges top-level keys. 
-                    # To merge into a dict 'results', we might need to be careful if LangGraph overwrites the whole dict.
-                    # Standard StateGraph merges keys. 'results' is a key. 
-                    # If we return {"results": {...}}, it replaces? Or merges?
-                    # Dicts in TypedDict state usually replace unless using a reducer.
-                    # For simplicity, we assume we return the *new* entry to be merged by a reducer if one existed,
-                    # but here we might need to read the current state's results to append?
-                    # Actually, let's just use a dedicated key per node? No, dynamic keys are hard.
+                    # Used to read 'results' from state, update it, return it.
+                    # optimized: now we just return the delta and let the reducer merge it.
                     
-                    # Better aproach for now: Read 'results' from state, update it, return it.
-                    current_results = state.get("results", {}) or {}
-                    current_results[_node_id] = {
-                        "status": result.get("status", "unknown"),
-                        "exit_code": result.get("exit_code"),
-                        "timestamp": "iso-time-placeholder"
+                    node_result = {
+                        _node_id: {
+                            "status": result.get("status", "unknown"),
+                            "exit_code": result.get("exit_code"),
+                            "timestamp": "iso-time-placeholder"
+                        }
                     }
 
                     return {
                         "logs": [log_entry],
                         "execution_status": "RUNNING",
-                        "results": current_results
+                        "results": node_result
                     }
                         
                 except Exception as e:

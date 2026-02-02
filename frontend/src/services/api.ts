@@ -208,3 +208,20 @@ export const resumeWorkflow = async (threadId: string, workflowId: string, sudoP
         throw error;
     }
 };
+export const cancelWorkflow = async (threadId: string) => {
+    try {
+        const response = await fetch(`${API_URL}/api/v1/workflow/cancel/${threadId}`, {
+            method: 'POST',
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || err.error || 'Cancellation failed');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error cancelling workflow:', error);
+        throw error;
+    }
+};
