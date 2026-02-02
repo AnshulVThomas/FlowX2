@@ -22,6 +22,7 @@ class GraphBuilder:
             node_id = node["id"]
             node_type = node["type"]
             node_data = node.get("data", {})
+            node_data["id"] = node_id  # Inject ID so node knows itself
             
             # Get executable instance from registry
             flow_node = self.registry.get_node(node_type)
@@ -31,7 +32,9 @@ class GraphBuilder:
                 
             # Define the LangGraph node function wrapper
             # This captures specific node_data in the closure
-            async def node_wrapper(state: FlowState, _node_id=node_id, _flow_node_cls=flow_node, _node_data=node_data):
+            from langchain_core.runnables import RunnableConfig
+            
+            async def node_wrapper(state: FlowState, config: RunnableConfig, _node_id=node_id, _flow_node_cls=flow_node, _node_data=node_data):
                 # Update current node ID in state
                 state["current_node_id"] = _node_id
                 
@@ -39,9 +42,27 @@ class GraphBuilder:
                 # FlowXNode base class now handles self.data = _node_data
                 instance = _flow_node_cls(_node_data)
                 
+                # 3. CONSTRUCT EPHEMERAL CONTEXT
+                # We need to pass 'emit_event' to the node, but it cannot be in the persistent 'state'
+                # because functions are not serializable by msgpack (MongoDB Checkpointer).
+                # We create a shallow copy of the state and inject the ephemeral context.
+                
+                emit_event = config.get("configurable", {}).get("emit_event")
+                
+                # Copy persistent context and inject ephemeral services
+                runtime_context_dict = state.get("context", {}).copy()
+                if emit_event:
+                    runtime_context_dict["emit_event"] = emit_event
+                
+                # Create the execution state (this is what the Node sees)
+                execution_state = state.copy()
+                execution_state["context"] = runtime_context_dict
+                
                 # Execute logic (Protocol 'execute' method)
                 try:
-                    result = await instance.execute(state, _node_data)
+                    print(f"--- [GraphBuilder] Executing Node: {_node_id} ---")
+                    result = await instance.execute(execution_state, _node_data)
+                    print(f"--- [GraphBuilder] Node {_node_id} COMPLETED. Status: {result.get('status')} ---")
                     
                     # Log result
                     log_entry = {
@@ -56,9 +77,12 @@ class GraphBuilder:
                         "execution_status": "RUNNING"
                     }
                 except Exception as e:
+                    print(f"!!! [GraphBuilder] Node {_node_id} FAILED: {e} !!!")
                     # If it's a NodeInterrupt (from sudo), this block might not catch it 
                     # if LangGraph catches it first. Ideally we let it bubble up?
                     # But for generic errors:
+                    import traceback
+                    traceback.print_exc()
                     return {
                         "execution_status": "FAILED",
                         "logs": [{"node_id": _node_id, "timestamp": "", "message": str(e)}]

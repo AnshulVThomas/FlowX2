@@ -395,6 +395,8 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                         />
                     )}
 
+
+
                     {/* Terminal View */}
                     <div className={`absolute inset-0 bg-[#1e1e1e] z-20 flex flex-col transition-opacity duration-200 ${terminalVisibilityClass}`}>
                         <div className="h-8 bg-gradient-to-b from-[#2a2a2a] to-[#1e1e1e] border-b border-white/5 flex items-center px-3 gap-2 select-none flex-shrink-0">
@@ -403,14 +405,21 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                                 <div className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]" />
                                 <button onClick={() => setIsExpanded(!isExpanded)} className="w-2.5 h-2.5 rounded-full bg-[#27C93F] hover:bg-[#27C93F]/80 flex items-center justify-center text-transparent hover:text-black/50 text-[6px] font-bold">{isExpanded ? <Minimize2 size={6} /> : <Maximize2 size={6} />}</button>
                             </div>
-                            <span className="ml-2 text-[10px] text-gray-500 font-mono">bash</span>
+                            <span className="ml-2 text-[10px] text-gray-500 font-mono">
+                                {data.execution_status === 'running' ? 'stream://backend' : 'bash'}
+                            </span>
                         </div>
                         <div className="flex-grow relative overflow-hidden nodrag">
                             <TerminalComponent
                                 ref={terminalRef}
                                 hideToolbar={true}
                                 onClose={handleTerminalClose}
+                                mode={(data.execution_status === 'running' || data.execution_status === 'attention_required') ? 'stream' : 'interactive'}
+                                nodeId={id}
                                 onCommandComplete={(code) => {
+                                    // In stream mode, validation is handled by store updates
+                                    if ((data.execution_status === 'running' || data.execution_status === 'attention_required')) return;
+
                                     setIsRunning(false);
                                     if (code === 0) {
                                         setResultStatus('success');

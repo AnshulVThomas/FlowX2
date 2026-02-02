@@ -9,6 +9,8 @@ class RuntimeContext(TypedDict):
     # dynamic context passed during execution (e.g. websocket, db connection)
     system_fingerprint: Dict[str, Any]
     thread_id: str
+    emit_event: Optional[Any] # Callable[[str, Dict], Awaitable[None]]
+    state: Dict[str, Any]
     
 class FlowXNode(ABC):
     """
