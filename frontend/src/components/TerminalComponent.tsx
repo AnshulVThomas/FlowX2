@@ -16,6 +16,7 @@ interface TerminalComponentProps {
     hideToolbar?: boolean;
     mode?: 'interactive' | 'stream';
     nodeId?: string;
+    shouldConnect?: boolean;
 }
 
 const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
@@ -23,13 +24,14 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
     onCommandComplete,
     hideToolbar,
     mode = 'interactive',
-    nodeId
+    nodeId,
+    shouldConnect = true
 }, ref) => {
     const terminalRef = useRef<HTMLDivElement>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const xtermRef = useRef<Terminal | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
-    const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+    const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
     const bufferRef = useRef("");
 
     const onExecuteRef = useRef(onCommandComplete);
@@ -69,6 +71,19 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
 
     useEffect(() => {
         if (!terminalRef.current) return;
+
+        // --- LAZY CONNECTION CHECK ---
+        if (!shouldConnect) {
+            // If we were connected, close it.
+            if (wsRef.current) {
+                wsRef.current.close();
+                wsRef.current = null;
+                setStatus('disconnected');
+            }
+            // Do not proceed to initialization
+            return;
+        }
+        // -----------------------------
 
         let term: Terminal | null = null;
         let ws: WebSocket | null = null;
@@ -233,7 +248,7 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
             wsRef.current = null;
             xtermRef.current = null;
         };
-    }, [mode, nodeId]); // Re-run if mode changes (Run vs Edit) or Node ID changes
+    }, [mode, nodeId, shouldConnect]); // Re-run if mode changes (Run vs Edit) or Node ID changes
 
     return (
         <div className="flex flex-col h-full w-full bg-[#1e1e1e] rounded-b-md overflow-hidden relative">

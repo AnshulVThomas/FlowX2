@@ -229,6 +229,16 @@ async def get_workflow_details(workflow_id: str):
     document.pop("_id", None)
     return document
 
+@app.delete("/workflows/{workflow_id}")
+async def delete_workflow(workflow_id: str):
+    database = db.get_db()
+    result = await database.workflows.delete_one({"id": workflow_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+        
+    return {"status": "success", "message": "Workflow deleted"}
+
 @app.get("/system-info")
 async def get_system_info():
     from app.core.system import get_system_fingerprint
@@ -366,7 +376,9 @@ async def resume_workflow(thread_id: str, payload: dict):
     # 2. REBUILD GRAPH
     # We need the exact same graph structure to map the checkpoint correctly
     builder = GraphBuilder(checkpointer=checkpointer)
-    graph = builder.build(workflow_data)
+    # FIX: The DB document wraps nodes/edges in a 'data' field
+    graph_source = workflow_data.get("data", {})
+    graph = builder.build(graph_source)
     
     # 3. RESUME EXECUTION
     # Tier 4: Inject WebSocket Emitter (Critical for Resume Streaming)

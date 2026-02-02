@@ -242,6 +242,24 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
         }
     };
 
+    // --- TABS & TERMINAL STATE ---
+    const [activeTab, setActiveTab] = useState<'stream' | 'interactive'>('stream');
+
+    // Auto-Switch to Output (Stream) when running
+    useEffect(() => {
+        const status = data.execution_status;
+        if (status === 'running' || status === 'attention_required') {
+            setActiveTab('stream');
+            setIsTerminalOpen(true); // Force open if closed
+        }
+    }, [data.execution_status]);
+
+    // Connect Stream if: We are running, or we have finished (to show logs)
+    const shouldConnectStream = ['running', 'completed', 'failed', 'attention_required'].includes(data.execution_status || '');
+
+    // Connect Interactive if: User explicitly clicked the tab
+    const shouldConnectInteractive = activeTab === 'interactive';
+
     const handleTerminalClose = useCallback(() => {
         setIsTerminalOpen(false);
         setIsExpanded(false);
@@ -261,22 +279,27 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
         // Priority 1: Selection (Blue) - Overrides everything as requested
         ringClass = "ring-2 ring-blue-500";
         shadowClass = "shadow-xl shadow-blue-500/30";
-    } else if (isRunning) {
+    } else if (isRunning || data.execution_status === 'running') {
         // Priority 2: Running (Pulse Indigo)
         ringClass = "ring-2 ring-indigo-500 animate-pulse";
         shadowClass = "shadow-xl shadow-indigo-500/30";
-    } else if (validationStatus === 'VALIDATION_FAILED') {
-        // Priority 3: Validation Failed (Yellow Pulse)
+    } else if (data.execution_status === 'attention_required') {
+        // Priority 3: Attention Required (Yellow Pulse)
         ringClass = "ring-2 ring-amber-500 animate-pulse";
         shadowClass = "shadow-xl shadow-amber-500/30";
-    } else if (resultStatus === 'success' && data.history && data.history.length > 0) {
-        // Priority 4: Success (Green) - Only if we actually have history
-        ringClass = "ring-2 ring-emerald-500";
-        shadowClass = "shadow-xl shadow-emerald-500/20";
-    } else if (resultStatus === 'error' && data.history && data.history.length > 0) {
+    } else if (validationStatus === 'VALIDATION_FAILED') {
+        // Priority 4: Validation Failed (Yellow Pulse)
+        // Must check this BEFORE execution status so invalid config overrides old results
+        ringClass = "ring-2 ring-amber-500 animate-pulse";
+        shadowClass = "shadow-xl shadow-amber-500/30";
+    } else if (data.execution_status === 'failed' || resultStatus === 'error') {
         // Priority 5: Error (Red)
         ringClass = "ring-2 ring-rose-500";
         shadowClass = "shadow-xl shadow-rose-500/20";
+    } else if (data.execution_status === 'completed' || resultStatus === 'success') {
+        // Priority 6: Success (Green)
+        ringClass = "ring-2 ring-emerald-500";
+        shadowClass = "shadow-xl shadow-emerald-500/20";
     }
 
     // Optimization: 'visible' + 'invisible' + pointer events + z-index
@@ -399,57 +422,104 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
 
                     {/* Terminal View */}
                     <div className={`absolute inset-0 bg-[#1e1e1e] z-20 flex flex-col transition-opacity duration-200 ${terminalVisibilityClass}`}>
-                        <div className="h-8 bg-gradient-to-b from-[#2a2a2a] to-[#1e1e1e] border-b border-white/5 flex items-center px-3 gap-2 select-none flex-shrink-0">
-                            <div className="flex gap-1.5">
-                                <button onClick={handleTerminalClose} className="w-2.5 h-2.5 rounded-full bg-[#FF5F56] hover:bg-[#FF5F56]/80 flex items-center justify-center text-transparent hover:text-black/50 text-[8px] font-bold">✕</button>
-                                <div className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]" />
-                                <button onClick={() => setIsExpanded(!isExpanded)} className="w-2.5 h-2.5 rounded-full bg-[#27C93F] hover:bg-[#27C93F]/80 flex items-center justify-center text-transparent hover:text-black/50 text-[6px] font-bold">{isExpanded ? <Minimize2 size={6} /> : <Maximize2 size={6} />}</button>
+
+                        {/* --- NEW TAB BAR HEADER --- */}
+                        <div className="h-8 bg-[#252526] border-b border-black/20 flex items-center justify-between select-none flex-shrink-0">
+
+                            {/* Left: Tabs */}
+                            <div className="flex h-full">
+                                {/* Output Tab */}
+                                <button
+                                    onClick={() => setActiveTab('stream')}
+                                    className={`
+                                        flex items-center gap-2 px-4 h-full text-[10px] font-medium transition-colors
+                                        ${activeTab === 'stream'
+                                            ? 'bg-[#1e1e1e] text-white border-t-2 border-indigo-500'
+                                            : 'text-gray-500 hover:text-gray-300 hover:bg-[#2a2a2b]'}
+                                    `}
+                                >
+                                    <div className={`w-1.5 h-1.5 rounded-full ${data.execution_status === 'running' ? 'bg-indigo-500 animate-pulse' : 'bg-gray-400'}`} />
+                                    OUTPUT
+                                </button>
+
+                                {/* Terminal Tab */}
+                                <button
+                                    onClick={() => setActiveTab('interactive')}
+                                    className={`
+                                        flex items-center gap-2 px-4 h-full text-[10px] font-medium transition-colors
+                                        ${activeTab === 'interactive'
+                                            ? 'bg-[#1e1e1e] text-white border-t-2 border-emerald-500'
+                                            : 'text-gray-500 hover:text-gray-300 hover:bg-[#2a2a2b]'}
+                                    `}
+                                >
+                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    TERMINAL
+                                </button>
                             </div>
-                            <span className="ml-2 text-[10px] text-gray-500 font-mono">
-                                {data.execution_status === 'running' ? 'stream://backend' : 'bash'}
-                            </span>
+
+                            {/* Right: Window Controls */}
+                            <div className="flex items-center px-3 gap-2">
+                                <span className="mr-2 text-[9px] text-gray-600 font-mono">
+                                    {activeTab === 'stream' ? 'READ-ONLY' : 'BASH'}
+                                </span>
+                                <div className="flex gap-1.5">
+                                    <button onClick={handleTerminalClose} className="w-2.5 h-2.5 rounded-full bg-[#FF5F56] hover:opacity-80 flex items-center justify-center text-transparent hover:text-black/50 text-[8px] font-bold">✕</button>
+                                    <button onClick={() => setIsExpanded(!isExpanded)} className="w-2.5 h-2.5 rounded-full bg-[#27C93F] hover:opacity-80 flex items-center justify-center text-transparent hover:text-black/50 text-[6px] font-bold">
+                                        {isExpanded ? <Minimize2 size={6} /> : <Maximize2 size={6} />}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
+
+                        {/* --- DUAL TERMINAL CONTAINER --- */}
                         <div className="flex-grow relative overflow-hidden nodrag">
-                            <TerminalComponent
-                                ref={terminalRef}
-                                hideToolbar={true}
-                                onClose={handleTerminalClose}
-                                mode={(data.execution_status === 'running' || data.execution_status === 'attention_required' || data.execution_status === 'completed' || data.execution_status === 'failed') ? 'stream' : 'interactive'}
-                                nodeId={id}
-                                onCommandComplete={(code) => {
-                                    // In stream mode, validation is handled by store updates
-                                    if ((data.execution_status === 'running' || data.execution_status === 'attention_required')) return;
 
-                                    setIsRunning(false);
-                                    if (code === 0) {
-                                        setResultStatus('success');
-                                        toast.success('Execution successful');
-                                    } else {
-                                        setResultStatus('error');
-                                        toast.error(`Exit Code: ${code}`);
-                                    }
+                            {/* 1. STREAM TERMINAL (Workflow Logs) */}
+                            {/* Visibility: Hidden prevents rendering but keeps buffer alive */}
+                            <div className={`absolute inset-0 bg-[#1e1e1e] ${activeTab === 'stream' ? 'z-10 visible' : 'z-0 invisible'}`}>
+                                <TerminalComponent
+                                    hideToolbar={true}
+                                    onClose={handleTerminalClose}
+                                    mode="stream"
+                                    nodeId={id}
+                                    shouldConnect={shouldConnectStream}
+                                // No onCommandComplete here because the store handles workflow status
+                                />
+                            </div>
 
-                                    // Update history status
-                                    const newHistory = [...(history || [])];
-                                    // Logic for manual runs: Add new entry if not existing? 
-                                    // Actually, usually we add "pending" entry when run starts. 
-                                    // But here we are in 'onCommandComplete'.
-                                    // For now, let's just append a completed entry for manual runs.
+                            {/* 2. INTERACTIVE TERMINAL (Manual Debug) */}
+                            <div className={`absolute inset-0 bg-[#1e1e1e] ${activeTab === 'interactive' ? 'z-10 visible' : 'z-0 invisible'}`}>
+                                <TerminalComponent
+                                    ref={terminalRef}
+                                    hideToolbar={true}
+                                    onClose={handleTerminalClose}
+                                    mode="interactive"
+                                    nodeId={id}
+                                    shouldConnect={shouldConnectInteractive}
+                                    onCommandComplete={(code) => {
+                                        // Manual runs handled locally
+                                        setIsRunning(false);
+                                        if (code === 0) {
+                                            toast.success('Manual Command Executed');
+                                        } else {
+                                            toast.error(`Exit Code: ${code}`);
+                                        }
 
-                                    newHistory.unshift({
-                                        prompt: prompt || "Manual Execution",
-                                        command: command || "", // This might be stale if user typed in terminal. 
-                                        // But for interactive mode, we usually don't track every char.
-                                        // We'll use the 'command' state.
-                                        timestamp: Date.now(),
-                                        type: 'executed',
-                                        runType: 'manual',
-                                        status: code === 0 ? 'success' : 'failure'
-                                    });
+                                        // Optional: Add manual run to history logic here
+                                        const newHistory = [...(history || [])];
+                                        newHistory.unshift({
+                                            prompt: prompt || "Manual Execution",
+                                            command: command || "",
+                                            timestamp: Date.now(),
+                                            type: 'executed',
+                                            runType: 'manual',
+                                            status: code === 0 ? 'success' : 'failure'
+                                        });
+                                        updateHistory(newHistory);
+                                    }}
+                                />
+                            </div>
 
-                                    updateHistory(newHistory);
-                                }}
-                            />
                         </div>
                     </div>
 
