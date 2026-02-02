@@ -11,7 +11,7 @@ import {
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
 import type { Workflow, WorkflowSummary } from '../types';
-import { fetchWorkflowDetails, deleteWorkflow as apiDeleteWorkflow, saveWorkflow as apiSaveWorkflow } from '../services/api';
+import { fetchWorkflowDetails, deleteWorkflow as apiDeleteWorkflow, saveWorkflow as apiSaveWorkflow, validateWorkflow } from '../services/api';
 
 interface WorkflowState {
     // Global Lists
@@ -23,8 +23,12 @@ interface WorkflowState {
     nodes: Node[];
     edges: Edge[];
     isDirty: boolean; // <--- The new source of truth for the active workflow
+    validationStatus: Record<string, string>;
 
     // Actions
+    validateGraph: () => Promise<void>;
+
+    // Editor Actions
     startWorkflowCreation: () => void;
     cancelWorkflowCreation: () => void;
     createWorkflow: (name: string) => Promise<void>;
@@ -58,6 +62,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     nodes: [],
     edges: [],
     isDirty: false,
+    validationStatus: {},
     systemContext: null,
 
     setSystemContext: (context) => set({ systemContext: context }),
@@ -243,6 +248,20 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         } catch (error) {
             console.error('Failed to save workflow', error);
             throw error; // Re-throw so UI can show error toast
+        }
+    },
+
+    validateGraph: async () => {
+        const { nodes, edges } = get();
+        try {
+            const result = await validateWorkflow(nodes, edges);
+            if (result.status === 'success') {
+                set({ validationStatus: result.validation_map });
+            }
+        } catch (error) {
+            console.error("Validation failed", error);
+            // Optional: Set global error state or just clear validation
+            set({ validationStatus: {} });
         }
     },
 

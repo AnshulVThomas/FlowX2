@@ -11,6 +11,8 @@ import asyncio
 import json
 import base64
 
+from routers import bridge
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Connect to the database
@@ -28,6 +30,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(bridge.router, prefix="/workflow", tags=["Workflow Bridge"])
 
 # Global error handlers
 @app.exception_handler(Exception)

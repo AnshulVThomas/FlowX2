@@ -26,3 +26,14 @@ This document tracks the specific sequence of tasks for the LangGraph integratio
    v
 
 
+## Phase 3: Tier 2 - Graph Compiler
+
+**3. Reachability & Pre-Flight Validation**
+   - **Action**: Refactored `backend/engine/validator.py` to implement BFS Reachability Analysis.
+   - **Action**: Created `backend/routers/bridge.py` exposing `POST /workflow/validate`.
+   - **Action**: Connected Frontend `Navbar` (Shield Button) to the validation API.
+   - **Action**: Updated `CommandNode` to visualize `READY` (Pulse) vs `VALIDATION_FAILED` (Yellow) states.
+   - **Outcome**: The engine now selectively validates only the executable path, ignoring orphan nodes. Verified with backend integration tests.
+   |
+   |
+   v

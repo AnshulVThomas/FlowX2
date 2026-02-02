@@ -1,4 +1,4 @@
-import { Plus, X, Save, Activity, Check } from 'lucide-react';
+import { Plus, X, Save, Activity, Check, ShieldCheck } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useWorkflowStore } from '../../store/useWorkflowStore';
 import { useServerStatus } from '../../hooks/useServerStatus';
@@ -22,6 +22,7 @@ export function Navbar() {
     const updateWorkflowName = useWorkflowStore(state => state.updateWorkflowName);
     const startWorkflowCreation = useWorkflowStore(state => state.startWorkflowCreation);
     const cancelWorkflowCreation = useWorkflowStore(state => state.cancelWorkflowCreation);
+    const validateGraph = useWorkflowStore(state => state.validateGraph);
 
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
@@ -167,6 +168,16 @@ export function Navbar() {
                         className={`p-2 rounded-full transition-colors ${isCreatingWorkflow ? 'bg-white/5 text-gray-500 cursor-not-allowed' : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white'}`}
                     >
                         <Plus size={18} />
+                    </button>
+                    <button
+                        onClick={() => {
+                            validateGraph();
+                            toast.info('Validating workflow...');
+                        }}
+                        className="p-2 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 transition-all"
+                        title="Validate Workflow (Pre-Flight)"
+                    >
+                        <ShieldCheck size={18} />
                     </button>
                     <button
                         onClick={handleSaveData}

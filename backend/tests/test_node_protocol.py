@@ -53,42 +53,50 @@ def test_command_node_validation_placeholder():
 
 # --- Workflow Integration Tests (Validator) ---
 
-def test_validator_integration_valid():
+from backend.engine.validator import validate_workflow, validate_graph
+
+# ... (Previous tests) ...
+
+def test_validate_graph_reachability_and_status():
+    """
+    Tier 2 Verification:
+    1. Start -> Command (Valid) => Both READY
+    2. Orphan Command (Invalid) => Ignored (Not in map or not status FAILED)
+    """
     nodes = [
         {"id": "start", "type": "startNode"},
-        {"id": "cmd1", "type": "commandNode", "data": {"command": "echo hi"}}
+        {"id": "cmd1", "type": "commandNode", "data": {"command": "echo hi"}},
+        {"id": "orphan_bad", "type": "commandNode", "data": {"command": ""}} # Empty, Invalid
     ]
     edges = [
         {"source": "start", "target": "cmd1"}
     ]
-    # Should return True
-    assert validate_workflow(nodes, edges) is True
+    
+    validation_map, errors = validate_graph(nodes, edges)
+    
+    # 1. Start and cmd1 should be READY
+    assert validation_map.get("start") == "READY"
+    assert validation_map.get("cmd1") == "READY"
+    
+    # 2. Orphan node should NOT be in validation_map (ignored)
+    assert "orphan_bad" not in validation_map
+    
+    # 3. No critical errors should be reported for the orphan
+    # (validate_graph returns errors for reachable nodes)
+    assert len(errors) == 0
 
-def test_validator_integration_invalid_command():
+def test_validate_graph_failure_status():
     nodes = [
         {"id": "start", "type": "startNode"},
-        {"id": "cmd1", "type": "commandNode", "data": {"command": ""}} # Empty
+        {"id": "cmd_bad", "type": "commandNode", "data": {"command": ""}}
     ]
     edges = [
-        {"source": "start", "target": "cmd1"}
+        {"source": "start", "target": "cmd_bad"}
     ]
     
-    with pytest.raises(HTTPException) as excinfo:
-        validate_workflow(nodes, edges)
+    validation_map, errors = validate_graph(nodes, edges)
     
-    assert excinfo.value.status_code == 400
-    details = excinfo.value.detail
-    assert any(d['message'] == "Command is empty" for d in details)
-
-def test_validator_orphan_check():
-    nodes = [
-        {"id": "start", "type": "startNode"},
-        {"id": "cmd1", "type": "commandNode", "data": {"command": "echo hi"}}
-    ]
-    edges = [] # No connection
-    
-    # Validator currently considers Orphan as WARNING, not CRITICAL exception
-    # So it should NOT raise HTTPException, but internal errors list has warning.
-    # The function returns True if no CRITICAL errors.
-    
-    assert validate_workflow(nodes, edges) is True
+    assert validation_map.get("start") == "READY"
+    assert validation_map.get("cmd_bad") == "VALIDATION_FAILED"
+    assert len(errors) > 0
+    assert errors[0]["nodeId"] == "cmd_bad"

@@ -137,3 +137,25 @@ export const generateCommand = async (prompt: string, nodeId: string, systemCont
         throw error;
     }
 };
+
+export const validateWorkflow = async (nodes: any[], edges: any[]) => {
+    try {
+        const response = await fetch(`${API_URL}/workflow/validate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ nodes, edges }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Validation request failed');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error validating workflow:', error);
+        throw error;
+    }
+};

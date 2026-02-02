@@ -167,3 +167,26 @@ A Singleton `NodeRegistry` dynamically maps node type strings (e.g., `"commandNo
 The `validate_workflow` function has been rewritten to:
 1.  **Topology Checks**: Validates global graph structure (e.g., Single Start Node).
 2.  **Delegated Validation**: Iterates through nodes and delegates specific checks to the registered Node Strategy.
+### 10. FlowX Execution Engine Architecture (Tier 2: Graph Compiler)
+
+Building on the Modular Protocol, Tier 2 introduces **Reachability Analysis** and **Pre-Flight Validation** to ensure only valid, executable paths are run.
+
+#### A. Reachability Analysis (BFS)
+The compiler performs a Breadth-First Search (BFS) starting from the single `StartNode`.
+- **Reachable Nodes**: Validated using their respective `FlowXNode` strategies.
+- **Orphan Nodes**: Completely ignored by the compiler/validator. This allows users to keep "draft" or disconnected nodes on the canvas without blocking the execution of the main flow.
+
+#### B. Validation API (`POST /workflow/validate`)
+A new bridge endpoint exposes the compiler's pre-flight check to the frontend.
+- **Input**: The full graph (nodes and edges).
+- **Process**: Runs BFS and strategy validation.
+- **Output**: A map of `NodeID -> Status`:
+    - `READY`: Reachable and passes internal checks.
+    - `VALIDATION_FAILED`: Reachable but contains errors (e.g., empty command).
+    - *(Missing)*: Orphaned nodes are omitted from the map.
+
+#### C. Visual Feedback Loop
+The frontend utilizes the validation status to provide immediate feedback:
+- **Shield Icon/Button**: Triggers the validation check manually.
+- **Pulse Animation (Green)**: Indicates a node is `READY` and part of the executable path.
+- **Warning Border (Yellow)**: Indicates a node is reachable but failed validation.

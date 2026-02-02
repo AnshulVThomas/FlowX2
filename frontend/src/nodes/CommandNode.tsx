@@ -212,6 +212,9 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
         setIsExpanded(false);
     }, []);
 
+    // Subscribe to validation status
+    const validationStatus = useWorkflowStore((state) => state.validationStatus[id]);
+
     // --- STYLES ---
     const badge = getBadgeConfig(uiRender?.badge_color);
     const BadgeIcon = badge.icon;
@@ -227,14 +230,23 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
         // Priority 2: Running (Pulse Indigo)
         ringClass = "ring-2 ring-indigo-500 animate-pulse";
         shadowClass = "shadow-xl shadow-indigo-500/30";
+    } else if (validationStatus === 'VALIDATION_FAILED') {
+        // Priority 3: Validation Failed (Yellow)
+        ringClass = "ring-2 ring-amber-500";
+        shadowClass = "shadow-xl shadow-amber-500/30";
     } else if (resultStatus === 'success' && data.history && data.history.length > 0) {
-        // Priority 3: Success (Green) - Only if we actually have history
+        // Priority 4: Success (Green) - Only if we actually have history
         ringClass = "ring-2 ring-emerald-500";
         shadowClass = "shadow-xl shadow-emerald-500/20";
     } else if (resultStatus === 'error' && data.history && data.history.length > 0) {
-        // Priority 4: Error (Red)
+        // Priority 5: Error (Red)
         ringClass = "ring-2 ring-rose-500";
         shadowClass = "shadow-xl shadow-rose-500/20";
+    } else if (validationStatus === 'READY') {
+        // Priority 6: Ready (Pulse Green/Emerald - Subtle)
+        // Pulse animation for Ready state
+        ringClass = "ring-2 ring-emerald-400/50 animate-pulse";
+        shadowClass = "shadow-lg shadow-emerald-400/20";
     }
 
     // Optimization: 'visible' + 'invisible' + pointer events + z-index
