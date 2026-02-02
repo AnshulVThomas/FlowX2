@@ -13,7 +13,6 @@ export function Navbar() {
     const isDirty = useWorkflowStore(state => state.isDirty);
 
     const isCreatingWorkflow = useWorkflowStore(state => state.isCreatingWorkflow);
-    const saveActiveWorkflow = useWorkflowStore(state => state.saveActiveWorkflow);
 
     // Actions
     const setActiveWorkflow = useWorkflowStore(state => state.setActiveWorkflow);
@@ -54,11 +53,16 @@ export function Navbar() {
 
     // ⚡️ UPDATED: Simpler save logic using store action
     const handleSaveData = async () => {
+        if (!isDirty) {
+            toast.info('No changes to save');
+            return;
+        }
+
         try {
-            await saveActiveWorkflow();
-            toast.success('Workflow saved successfully');
+            await useWorkflowStore.getState().saveActiveWorkflow();
+            toast.success('Workflow saved');
         } catch (error) {
-            toast.error('Failed to save workflow');
+            toast.error('Failed to save');
         }
     };
 
@@ -178,9 +182,10 @@ export function Navbar() {
                     </button>
                     <button
                         onClick={handleSaveData}
-                        className={`p-2 rounded-full transition-all ${isDirty
-                            ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 hover:bg-yellow-500/30 shadow-lg shadow-yellow-500/20'
-                            : 'bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20'
+                        disabled={!isDirty} // Optional: Disable visual interaction
+                        className={`p-2 rounded-full transition-all duration-300 ${isDirty
+                            ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 hover:bg-yellow-500/30 shadow-lg shadow-yellow-500/20 cursor-pointer'
+                            : 'bg-white/5 text-gray-500 border border-transparent cursor-not-allowed opacity-50'
                             }`}
                     >
                         <Save size={18} />

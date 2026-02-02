@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Sparkles, Square, Lock, Unlock, Info, Play } from 'lucide-react';
 import type { CommandNodeData } from './types';
 
@@ -15,7 +16,7 @@ interface FooterProps {
     setShowInfo: (val: boolean) => void;
 }
 
-export const Footer = ({
+export const Footer = memo(({
     isTerminalOpen,
     isLoading,
     isRunning,
@@ -104,4 +105,4 @@ export const Footer = ({
             )}
         </div>
     );
-};
+});

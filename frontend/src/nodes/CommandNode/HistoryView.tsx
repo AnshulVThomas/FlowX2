@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { History, X, Check, Play, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -16,7 +17,7 @@ interface HistoryViewProps {
     onClose: () => void;
 }
 
-export const HistoryView = ({ history, id, updateNodeData, setPrompt, setCommand, onClose }: HistoryViewProps) => {
+export const HistoryView = memo(({ history, id, updateNodeData, setPrompt, setCommand, onClose }: HistoryViewProps) => {
     return (
         <div className="absolute inset-0 bg-stone-50 z-30 flex flex-col animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-white">
@@ -70,4 +71,4 @@ export const HistoryView = ({ history, id, updateNodeData, setPrompt, setCommand
             </div>
         </div>
     );
-};
+});

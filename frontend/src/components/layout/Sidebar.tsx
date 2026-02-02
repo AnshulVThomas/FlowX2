@@ -1,9 +1,14 @@
 import { useWorkflowStore } from "../../store/useWorkflowStore";
 import { Play, Sparkles } from "lucide-react";
+import { memo } from "react";
 
-export function Sidebar() {
+// Optimization: Memoize the component
+export const Sidebar = memo(() => {
     // ⚡️ OPTIMIZED: Check the live 'nodes' array directly.
     // This removes the heavy .find() on the workflows array.
+    // Optimization: Zustand selector returns a primitive (boolean). 
+    // React will NOT re-render if the boolean value hasn't changed, 
+    // even if 'state.nodes' has changed reference.
     const hasStartNode = useWorkflowStore((state) =>
         state.nodes.some(node => node.type === 'startNode')
     );
@@ -15,14 +20,14 @@ export function Sidebar() {
     };
 
     return (
-        <aside className="w-64 bg-black/40 backdrop-blur-md border-r border-white/10 p-4 flex flex-col gap-4 z-40 h-full">
+        <aside className="w-64 bg-black/40 backdrop-blur-md border-r border-white/10 p-4 flex flex-col gap-4 z-40 h-full select-none">
             <div className="text-sm font-semibold text-gray-400 mb-2">Nodes</div>
 
             <div
                 className={`
                     flex items-center gap-3 p-3 rounded-lg border border-white/10 bg-white/5 transition-all
                     ${hasStartNode
-                        ? 'opacity-50 cursor-not-allowed'
+                        ? 'opacity-50 cursor-not-allowed grayscale'
                         : 'cursor-grab hover:bg-white/10 hover:border-white/20 active:cursor-grabbing'
                     }
                 `}
@@ -53,4 +58,4 @@ export function Sidebar() {
             </div>
         </aside>
     );
-}
+});

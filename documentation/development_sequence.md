@@ -162,3 +162,12 @@ This document tracks the sequence of tasks completed to build the current system
    - **Action**: Created `FlowXNode` base class, `NodeRegistry`, and concrete `StartNode`/`CommandNode` implementations.
    - **Action**: Verified with comprehensive unit tests (`backend/tests/test_node_protocol.py`).
    - **Outcome**: Foundation set for LangGraph execution engine.
+
+**21. UI Architecture & Optimization (Tier 2.5)**
+   - **Action**: Implemented **Process Sidebar**: A dedicated, collapsible panel tracking active command nodes and their statuses.
+   - **Action**: Created **Validation Shield**: A reusable component for visualizing node health (Ready/Error).
+   - **Optimization**: Stabilized `StartNode`, `CommandNode`, and `Sidebar` using memoization and stable selectors to ensure 60fps drag performance.
+   - **Action**: Enhanced **Validation UX**:
+        - `StartNode` triggers validation and displays a "Verifying" state.
+        - Nodes display specific validation errors via the Shield tooltip.
+        - "Dirty" state tracking added to the Save button for clearer user feedback.

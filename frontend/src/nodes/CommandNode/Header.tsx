@@ -1,3 +1,4 @@
+import { memo, useState, useEffect } from 'react';
 import { Terminal, History, Settings, Sparkles, Check, AlertTriangle, ShieldAlert } from 'lucide-react';
 import type { CommandNodeData } from './types';
 
@@ -21,13 +22,13 @@ interface HeaderProps {
     setPrompt: (val: string) => void;
     updateNodeData: (id: string, data: Partial<any>) => void;
     handleGenerate: () => void;
-    setIsTerminalOpen: (val: boolean) => void;
-    setIsExpanded: (val: boolean) => void;
-    setShowHistory: (val: boolean) => void;
-    setShowSettings: (val: boolean) => void;
+    setIsTerminalOpen: (val: boolean) => void; // Expects stable handler
+    setIsExpanded?: (val: boolean) => void; // Optional if handled by stable toggle
+    setShowHistory: (val: boolean) => void; // Expects stable handler
+    setShowSettings: (val: boolean) => void; // Expects stable handler
 }
 
-export const Header = ({
+export const Header = memo(({
     id,
     isLoading,
     showSettings,
@@ -39,12 +40,30 @@ export const Header = ({
     updateNodeData,
     handleGenerate,
     setIsTerminalOpen,
-    setIsExpanded,
     setShowHistory,
     setShowSettings
 }: HeaderProps) => {
     const badge = getBadgeConfig(uiRender?.badge_color);
     const BadgeIcon = badge.icon;
+
+    // 1. Create local state
+    const [localPrompt, setLocalPrompt] = useState(prompt);
+
+    // 2. Sync if parent updates prompt externally (e.g. history restore)
+    useEffect(() => {
+        setLocalPrompt(prompt);
+    }, [prompt]);
+
+    const handleCommit = () => {
+        if (localPrompt !== prompt) {
+            setPrompt(localPrompt);
+        }
+    };
+
+    const handleEnter = () => {
+        handleCommit();
+        handleGenerate(); // This will use the state synced in handleCommit logic in parent
+    };
 
     return (
         <div className="bg-white px-3 py-2.5 border-b border-gray-100 flex items-center gap-2 flex-shrink-0">
@@ -61,10 +80,13 @@ export const Header = ({
                     <input
                         type="text"
                         className="nodrag w-full text-xs font-medium text-gray-700 placeholder:text-gray-400 bg-stone-50 border border-transparent focus:border-indigo-200 focus:bg-white focus:ring-2 focus:ring-indigo-50/50 rounded px-2 py-1 transition-all duration-200"
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        onBlur={() => updateNodeData(id, { prompt })}
-                        onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
+                        value={localPrompt}
+                        onChange={(e) => setLocalPrompt(e.target.value)}
+                        onBlur={() => {
+                            handleCommit();
+                            updateNodeData(id, { prompt: localPrompt });
+                        }}
+                        onKeyDown={(e) => e.key === 'Enter' && handleEnter()}
                         placeholder="Describe command..."
                     />
                 ) : (
@@ -83,30 +105,20 @@ export const Header = ({
 
             <div className="flex items-center gap-1">
                 <button
-                    onClick={() => {
-                        const newState = !isTerminalOpen;
-                        setIsTerminalOpen(newState);
-                        setIsExpanded(newState);
-                    }}
+                    onClick={() => setIsTerminalOpen(!isTerminalOpen)}
                     className={`p-1.5 rounded transition-all ${isTerminalOpen ? 'bg-stone-100 text-stone-800' : 'text-gray-400 hover:text-gray-600 hover:bg-stone-50'}`}
                 >
                     <Terminal size={14} />
                 </button>
                 <button
-                    onClick={() => {
-                        setShowHistory(!showHistory);
-                        setShowSettings(false); // Exclusive toggle
-                    }}
+                    onClick={() => setShowHistory(!showHistory)}
                     className={`p-1.5 rounded transition-all ${showHistory ? 'bg-stone-100 text-stone-800' : 'text-gray-400 hover:text-gray-600 hover:bg-stone-50'}`}
                     title="History"
                 >
                     <History size={14} />
                 </button>
                 <button
-                    onClick={() => {
-                        setShowSettings(!showSettings);
-                        setShowHistory(false); // Exclusive toggle
-                    }}
+                    onClick={() => setShowSettings(!showSettings)}
                     className={`p-1.5 rounded transition-all ${showSettings ? 'bg-stone-100 text-stone-800' : 'text-gray-400 hover:text-gray-600 hover:bg-stone-50'}`}
                 >
                     <Settings size={14} />
@@ -114,4 +126,4 @@ export const Header = ({
             </div>
         </div>
     );
-};
+});

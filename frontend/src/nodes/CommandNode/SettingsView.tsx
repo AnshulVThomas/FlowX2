@@ -1,4 +1,5 @@
 
+import { memo } from 'react';
 import { Save } from 'lucide-react';
 
 interface SettingsViewProps {
@@ -9,7 +10,7 @@ interface SettingsViewProps {
     onClose: () => void;
 }
 
-export const SettingsView = ({ jsonError, contextString, setContextString, handleSaveContext, onClose }: SettingsViewProps) => {
+export const SettingsView = memo(({ jsonError, contextString, setContextString, handleSaveContext, onClose }: SettingsViewProps) => {
     return (
         <div className="absolute inset-0 bg-stone-50 z-30 p-3 flex flex-col animate-in fade-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-2">
@@ -28,4 +29,4 @@ export const SettingsView = ({ jsonError, contextString, setContextString, handl
             </div>
         </div>
     );
-};
+});

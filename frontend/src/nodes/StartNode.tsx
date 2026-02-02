@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useState, useCallback } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import { Play, Loader2 } from 'lucide-react';
 import { useWorkflowStore } from '../store/useWorkflowStore';
@@ -10,78 +10,78 @@ export type StartNodeData = Node<{
     status: string;
 }>;
 
-// 1. Define the component
+// --- OPTIMIZATION 1: Extract pure logic outside component ---
+// This prevents re-creation of this function on every render frame
+const getStatusStyles = (status: string | undefined, isSelected: boolean) => {
+    const s = (status || 'idle').toLowerCase();
+
+    // Base styles
+    let borderClass = 'border-stone-200';
+    let ringClass = '';
+    let textClass = 'text-gray-400';
+    let bgClass = 'bg-white';
+
+    switch (s) {
+        case 'running':
+            borderClass = 'border-blue-400';
+            ringClass = 'ring-4 ring-blue-500/20';
+            textClass = 'text-blue-500';
+            break;
+        case 'completed':
+            borderClass = 'border-green-500';
+            textClass = 'text-green-500';
+            break;
+        case 'failed':
+            borderClass = 'border-red-500';
+            textClass = 'text-red-500';
+            break;
+        default: // idle
+            if (isSelected) {
+                borderClass = 'border-blue-500';
+                ringClass = 'ring-2 ring-blue-500/20';
+            }
+            break;
+    }
+
+    if (isSelected && s !== 'idle') {
+        if (s === 'completed' || s === 'failed') {
+            ringClass = 'ring-2 ring-offset-1 ' + (s === 'completed' ? 'ring-green-500/40' : 'ring-red-500/40');
+        }
+    }
+
+    return { borderClass, ringClass, textClass, bgClass };
+};
+
 const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) => {
-    // 2. Select actions
+    // Selectors
     const saveActiveWorkflow = useWorkflowStore((state) => state.saveActiveWorkflow);
     const validateGraph = useWorkflowStore((state) => state.validateGraph);
+
+    // Select specific data for this node to avoid re-renders when other nodes validate
     const validationStatus = useWorkflowStore((state) => state.validationStatus[id]);
     const validationErrors = useWorkflowStore((state) => state.validationErrors?.[id]);
 
     const [isValidating, setIsValidating] = useState(false);
 
-    const handleRun = async (e: React.MouseEvent) => {
+    // --- OPTIMIZATION 2: Stable Handler ---
+    const handleRun = useCallback(async (e: React.MouseEvent) => {
         e.stopPropagation();
 
         setIsValidating(true);
         try {
+            // Await both to ensure sequentiality
             await saveActiveWorkflow();
             await validateGraph();
             toast.success('Workflow validated and saved');
         } catch (error) {
             toast.error('Validation/Save failed');
         } finally {
-            // Keep animation for a moment to be visible
+            // Keep animation for a moment for UX visibility
             setTimeout(() => setIsValidating(false), 800);
         }
-    };
+    }, [saveActiveWorkflow, validateGraph]);
 
-    // Helper to determine styles based on status
-    const getStatusStyles = (status: string | undefined, isSelected: boolean) => {
-        const s = (status || 'idle').toLowerCase();
-
-        // Base styles
-        let borderClass = 'border-stone-200';
-        let ringClass = '';
-        let textClass = 'text-gray-400';
-        let bgClass = 'bg-white';
-
-        switch (s) {
-            case 'running':
-                borderClass = 'border-blue-400';
-                ringClass = 'ring-4 ring-blue-500/20'; // Prominent ring for running
-                textClass = 'text-blue-500';
-                break;
-            case 'completed':
-                borderClass = 'border-green-500';
-                textClass = 'text-green-500';
-                break;
-            case 'failed':
-                borderClass = 'border-red-500';
-                textClass = 'text-red-500';
-                break;
-            default: // idle
-                if (isSelected) {
-                    borderClass = 'border-blue-500';
-                    ringClass = 'ring-2 ring-blue-500/20';
-                }
-                break;
-        }
-
-        // Selection override for non-running/completed states if needed, 
-        // or just add a selection ring if one isn't already there.
-        if (isSelected && s !== 'idle') {
-            // Add a subtle extra indicator or keep the status ring? 
-            // Usually, status takes precedence for border color, but selection needs to be seen.
-            // Let's rely on the status border but add a standard selection shadow or ring if not already ringing.
-            if (s === 'completed' || s === 'failed') {
-                ringClass = 'ring-2 ring-offset-1 ' + (s === 'completed' ? 'ring-green-500/40' : 'ring-red-500/40');
-            }
-        }
-
-        return { borderClass, ringClass, textClass, bgClass };
-    };
-
+    // Recalculate styles only when relevant props change
     const styles = getStatusStyles(data.status, selected);
 
     return (
@@ -92,7 +92,6 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
             ${styles.borderClass}
             ${styles.ringClass}
         `}>
-            {/* Shield Icon for Self-Validation */}
             <ValidationShield
                 status={validationStatus}
                 errors={validationErrors}
@@ -138,5 +137,7 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
     );
 };
 
-// 4. Wrap in memo to prevent re-renders while dragging other nodes
+// --- OPTIMIZATION 3: Custom Compare (Optional but recommended for strict performance) ---
+// If you don't need deep comparison, simple memo is fine. 
+// Given the props, simple memo is sufficient as React Flow handles 'data' immutability well.
 export const StartNode = memo(StartNodeComponent);

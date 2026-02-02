@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { ShieldCheck, ShieldX } from 'lucide-react';
 // shadcn/ui tooltip components assumed, or using native title for now as per instructions
 
@@ -7,7 +8,7 @@ interface ValidationShieldProps {
     className?: string;
 }
 
-export const ValidationShield = ({ status, errors, className = "" }: ValidationShieldProps) => {
+const ValidationShieldComponent = ({ status, errors, className = "" }: ValidationShieldProps) => {
     const displayErrors = errors || [];
 
     if (!status) return null;
@@ -34,3 +35,6 @@ export const ValidationShield = ({ status, errors, className = "" }: ValidationS
         </div>
     );
 };
+
+// OPTIMIZATION: Memoize to prevent re-renders when parent re-renders
+export const ValidationShield = memo(ValidationShieldComponent);

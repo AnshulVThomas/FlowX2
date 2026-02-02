@@ -239,21 +239,27 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         const { activeId, nodes, edges, workflows } = get();
         if (!activeId) return;
 
-        const currentMeta = workflows.find(w => w.id === activeId);
-        if (!currentMeta) return;
+        // Optimized: Don't search full array twice
+        const workflowIndex = workflows.findIndex(w => w.id === activeId);
+        if (workflowIndex === -1) return;
 
+        const currentMeta = workflows[workflowIndex];
         const workflowToSave: Workflow = { ...currentMeta, nodes, edges };
 
         try {
             await apiSaveWorkflow(workflowToSave);
-            set(state => ({
-                isDirty: false,
-                // Update the cache in the list
-                workflows: state.workflows.map(w => w.id === activeId ? workflowToSave : w)
-            }));
+            set(state => {
+                // Immutable update of just the specific workflow
+                const newWorkflows = [...state.workflows];
+                newWorkflows[workflowIndex] = workflowToSave;
+                return {
+                    isDirty: false,
+                    workflows: newWorkflows
+                };
+            });
         } catch (error) {
             console.error('Failed to save workflow', error);
-            throw error; // Re-throw so UI can show error toast
+            throw error;
         }
     },
 
@@ -265,14 +271,14 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
                 const statusMap = result.validation_map || {};
                 const errorList = result.errors || [];
 
-                // Group errors by Node ID
-                const errorMap: Record<string, string[]> = {};
-                errorList.forEach((err: any) => {
+                // OPTIMIZATION: Single pass reduce instead of multiple array operations
+                const errorMap = errorList.reduce((acc: Record<string, string[]>, err: any) => {
                     if (err.nodeId) {
-                        if (!errorMap[err.nodeId]) errorMap[err.nodeId] = [];
-                        errorMap[err.nodeId].push(err.message);
+                        if (!acc[err.nodeId]) acc[err.nodeId] = [];
+                        acc[err.nodeId].push(err.message);
                     }
-                });
+                    return acc;
+                }, {} as Record<string, string[]>);
 
                 set({
                     validationStatus: statusMap,
@@ -281,7 +287,6 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
             }
         } catch (error) {
             console.error("Validation failed", error);
-            // Optional: Set global error state or just clear validation
             set({ validationStatus: {} });
         }
     },

@@ -93,17 +93,43 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
     // But for existing nodes or manual edits?
 
     // Let's use the useEffect to INITIALIZE or RESET.
+    // Sync uiRender from props
+    useEffect(() => {
+        setUiRender(data.ui_render);
+    }, [data.ui_render]);
+
+    // Sync locked state from props
+    useEffect(() => {
+        if (data.locked !== undefined) {
+            setIsLocked(data.locked);
+        }
+    }, [data.locked]);
+
+    // Auto-lock high risk commands
+    // OPTIMIZATION: Only run this when uiRender changes (new generation), NOT when lock state changes.
+    // This allows the user to unlock it manually without fighting the effect.
     useEffect(() => {
         if (uiRender?.badge_color === 'red' || uiRender?.badge_color === 'yellow') {
+            // Only lock if we haven't already explicitly handled it?
+            // Simple logic: If new risky content arrives, lock it.
+            // We rely on this effect ONLY running when uiRender changes.
             if (data.locked !== true) {
                 setIsLocked(true);
                 updateNodeData(id, { locked: true });
             }
         }
-    }, [uiRender, id, updateNodeData, data.locked]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [uiRender, id, updateNodeData]); // Exclude data.locked to prevent loop
 
-    // Initialize context string safely
-    const [contextString, setContextString] = useState(JSON.stringify(data.system_context || {}, null, 2));
+    // Initialize context string safely (Lazy)
+    const [contextString, setContextString] = useState(() => JSON.stringify(data.system_context || {}, null, 2));
+
+    // Only update local string if incoming data changes significantly and we ARE NOT editing it
+    useEffect(() => {
+        if (!showSettings) { // Don't overwrite if user is currently editing
+            setContextString(JSON.stringify(data.system_context || {}, null, 2));
+        }
+    }, [data.system_context, showSettings]);
 
     const [jsonError, setJsonError] = useState('');
     const [resultStatus, setResultStatus] = useState<'success' | 'error' | null>(() => {
@@ -258,6 +284,30 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
         ? 'opacity-100 visible pointer-events-auto z-20'
         : 'opacity-0 invisible pointer-events-none -z-10';
 
+    // --- STABLE HANDLERS ---
+
+    const toggleSettings = useCallback(() => {
+        setShowSettings(prev => !prev);
+        setShowHistory(false);
+    }, []);
+
+    const toggleHistory = useCallback(() => {
+        setShowHistory(prev => !prev);
+        setShowSettings(false);
+    }, []);
+
+    const toggleTerminal = useCallback((val: boolean) => {
+        setIsTerminalOpen(val);
+        setIsExpanded(val);
+    }, []);
+
+    const updateLocked = useCallback((val: boolean) => {
+        setIsLocked(val);
+        updateNodeData(id, { locked: val });
+    }, [id, updateNodeData]);
+
+    const updateShowInfo = useCallback((val: boolean) => setShowInfo(val), []);
+
     return (
         // OPTIMIZATION 4: Hardware Acceleration hint
         <div className={`relative group transition-[width,height,box-shadow,ring-color] duration-300 ease-in-out nowheel will-change-[width,height] ${isExpanded ? 'w-[800px] h-[500px] z-50' : 'min-w-[420px] h-auto'}`}>
@@ -294,10 +344,9 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                     setPrompt={setPrompt}
                     updateNodeData={updateNodeData}
                     handleGenerate={handleGenerate}
-                    setIsTerminalOpen={setIsTerminalOpen}
-                    setIsExpanded={setIsExpanded}
-                    setShowHistory={setShowHistory}
-                    setShowSettings={setShowSettings}
+                    setIsTerminalOpen={toggleTerminal}
+                    setShowHistory={toggleHistory}
+                    setShowSettings={toggleSettings}
                 />
 
                 {/* --- BODY --- */}
@@ -405,11 +454,8 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                     handleGenerate={handleGenerate}
                     handleStop={handleStop}
                     handleRun={handleRun}
-                    setIsLocked={(val) => {
-                        setIsLocked(val);
-                        updateNodeData(id, { locked: val });
-                    }}
-                    setShowInfo={setShowInfo}
+                    setIsLocked={updateLocked}
+                    setShowInfo={updateShowInfo}
                 />
 
                 <Handle type="target" position={Position.Left} className="!w-3 !h-3 !bg-stone-400 !border-2 !border-white transition-all hover:scale-125 hover:!bg-indigo-500" />

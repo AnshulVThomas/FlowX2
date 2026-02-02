@@ -190,3 +190,18 @@ The frontend utilizes the validation status to provide immediate feedback:
 - **Shield Icon/Button**: Triggers the validation check manually.
 - **Pulse Animation (Green)**: Indicates a node is `READY` and part of the executable path.
 - **Warning Border (Yellow)**: Indicates a node is reachable but failed validation.
+
+### 11. Orchestration UI (Tier 2.5)
+To prepare for the Execution Engine, the UI has been enhanced to visualize process states at a glance.
+
+#### A. Process Sidebar
+A collapsible right-hand sidebar (`ProcessSidebar.tsx`) lists all active "Command Processes" in the current workflow.
+- **Purpose**: Provides a consolidated view of execution status (Running, Success, Error) without panning the canvas.
+- **Performance**: Optimized to detach from the main rendering loop, ensuring it doesn't impact drag performance.
+
+#### B. Validation Shield
+A formalized component (`ValidationShield.tsx`) attached to every executable node.
+- **State**:
+    - **Green Shield**: Ready for Tier 3 Execution.
+    - **Red Shield + Pulse**: Validation Failed (Hover for errors).
+- **Integration**: Linked directly to the backend `validation_map`.

@@ -1,4 +1,5 @@
 
+import { memo } from 'react';
 import { X, Info, AlertTriangle } from 'lucide-react';
 import type { CommandNodeData } from './types';
 
@@ -7,7 +8,7 @@ interface InfoOverlayProps {
     onClose: () => void;
 }
 
-export const InfoOverlay = ({ uiRender, onClose }: InfoOverlayProps) => {
+export const InfoOverlay = memo(({ uiRender, onClose }: InfoOverlayProps) => {
     if (!uiRender) return null;
 
     return (
@@ -43,4 +44,4 @@ export const InfoOverlay = ({ uiRender, onClose }: InfoOverlayProps) => {
             </div>
         </div>
     );
-};
+});
