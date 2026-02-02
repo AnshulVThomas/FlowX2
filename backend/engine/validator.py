@@ -4,8 +4,8 @@ from fastapi import HTTPException
 
 # Registry & Protocol
 from .registry import NodeRegistry
-from .nodes.start_node import StartNode
-from .nodes.command_node import CommandNode
+from nodes.start.node import StartNode
+from nodes.command.node import CommandNode
 
 # Register Nodes
 NodeRegistry.register("startNode", StartNode)

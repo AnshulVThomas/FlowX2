@@ -14,15 +14,18 @@ export type CommandNodeData = Node<{
         description: string;
         system_effect: string;
     };
-    history?: Array<{
-        prompt: string;
-        command: string;
-        timestamp: number;
-        type: 'generated' | 'executed';
-        status?: 'success' | 'failure' | 'pending';
-    }>;
+    history?: Array<HistoryItem>;
 
     // Tier 3 Execution Fields
     execution_status?: "generated" | "running" | "completed" | "failed" | "attention_required";
     thread_id?: string;
 }>;
+
+export type HistoryItem = {
+    prompt: string;
+    command: string;
+    timestamp: number;
+    type: 'generated' | 'executed';
+    runType?: 'manual' | 'workflow'; // New field for differentiation
+    status?: 'success' | 'failure' | 'pending';
+};

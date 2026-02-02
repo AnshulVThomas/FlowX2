@@ -165,6 +165,7 @@ export interface ExecutionResponse {
     status: "RUNNING" | "PAUSED" | "COMPLETED" | "FAILED" | "ATTENTION_REQUIRED";
     logs: any[];
     error?: string;
+    results?: Record<string, any>;
 }
 
 export const executeWorkflow = async (workflow: any): Promise<ExecutionResponse> => {

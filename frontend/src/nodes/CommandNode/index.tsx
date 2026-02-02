@@ -414,7 +414,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                                 ref={terminalRef}
                                 hideToolbar={true}
                                 onClose={handleTerminalClose}
-                                mode={(data.execution_status === 'running' || data.execution_status === 'attention_required') ? 'stream' : 'interactive'}
+                                mode={(data.execution_status === 'running' || data.execution_status === 'attention_required' || data.execution_status === 'completed' || data.execution_status === 'failed') ? 'stream' : 'interactive'}
                                 nodeId={id}
                                 onCommandComplete={(code) => {
                                     // In stream mode, validation is handled by store updates
@@ -431,14 +431,23 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
 
                                     // Update history status
                                     const newHistory = [...(history || [])];
-                                    const lastPendingIdx = newHistory.findIndex(h => h.type === 'executed' && h.status === 'pending');
-                                    if (lastPendingIdx !== -1) {
-                                        newHistory[lastPendingIdx] = {
-                                            ...newHistory[lastPendingIdx],
-                                            status: code === 0 ? 'success' : 'failure'
-                                        };
-                                        updateHistory(newHistory);
-                                    }
+                                    // Logic for manual runs: Add new entry if not existing? 
+                                    // Actually, usually we add "pending" entry when run starts. 
+                                    // But here we are in 'onCommandComplete'.
+                                    // For now, let's just append a completed entry for manual runs.
+
+                                    newHistory.unshift({
+                                        prompt: prompt || "Manual Execution",
+                                        command: command || "", // This might be stale if user typed in terminal. 
+                                        // But for interactive mode, we usually don't track every char.
+                                        // We'll use the 'command' state.
+                                        timestamp: Date.now(),
+                                        type: 'executed',
+                                        runType: 'manual',
+                                        status: code === 0 ? 'success' : 'failure'
+                                    });
+
+                                    updateHistory(newHistory);
                                 }}
                             />
                         </div>

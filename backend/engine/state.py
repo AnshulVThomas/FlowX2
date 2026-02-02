@@ -18,3 +18,6 @@ class FlowState(TypedDict):
     # Human-in-the-Loop / Resume State
     sudo_password: Optional[str] # Injected state for Resume
     pending_interaction: Optional[str] # e.g. "SUDO_PASSWORD_REQUIRED"
+    
+    # Per-Node Results (Tier 3 Enhancements)
+    results: Dict[str, Any] # node_id -> { status: 'success'|'error', exit_code: int, ... }

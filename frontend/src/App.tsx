@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 
 function App() {
   const isConnected = useServerStatus();
-  const { setWorkflows, createWorkflow } = useWorkflowStore();
+  const { setWorkflows, createWorkflow, connectGlobalSocket } = useWorkflowStore();
 
   useEffect(() => {
     if (isConnected) {
@@ -29,6 +29,10 @@ function App() {
         .catch(() => toast.error('Failed to sync workflows'));
     }
   }, [isConnected, setWorkflows, createWorkflow]);
+
+  useEffect(() => {
+    connectGlobalSocket();
+  }, []);
 
   return (
     <ReactFlowProvider>

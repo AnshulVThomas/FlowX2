@@ -2,14 +2,10 @@ import { memo } from 'react';
 import { History, X, Check, Play, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
+import type { HistoryItem } from './types';
+
 interface HistoryViewProps {
-    history: Array<{
-        prompt: string;
-        command: string;
-        timestamp: number;
-        type: 'generated' | 'executed';
-        status?: 'success' | 'failure' | 'pending';
-    }>;
+    history: Array<HistoryItem>;
     id: string;
     updateNodeData: (id: string, data: Partial<any>) => void;
     setPrompt: (val: string) => void;
@@ -56,7 +52,15 @@ export const HistoryView = memo(({ history, id, updateNodeData, setPrompt, setCo
                                     ) : (
                                         <Sparkles size={10} className="text-indigo-500 shrink-0" />
                                     )}
-                                    <span className="text-[11px] font-semibold text-gray-700 line-clamp-1">{item.prompt}</span>
+                                    <span className="text-[11px] font-semibold text-gray-700 line-clamp-1">
+                                        {item.prompt}
+                                    </span>
+                                    {item.runType && (
+                                        <span className={`text-[9px] px-1 py-0.5 rounded ${item.runType === 'workflow' ? 'bg-purple-100 text-purple-600' : 'bg-orange-100 text-orange-600'
+                                            }`}>
+                                            {item.runType}
+                                        </span>
+                                    )}
                                 </div>
                                 <span className="text-[9px] text-gray-400 whitespace-nowrap">
                                     {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

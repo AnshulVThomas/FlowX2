@@ -1,5 +1,5 @@
 from typing import Dict, Any, List
-from ..protocol import FlowXNode, ValidationResult, RuntimeContext
+from engine.protocol import FlowXNode, ValidationResult, RuntimeContext
 
 class StartNode(FlowXNode):
     def validate(self, data: Dict[str, Any]) -> ValidationResult:

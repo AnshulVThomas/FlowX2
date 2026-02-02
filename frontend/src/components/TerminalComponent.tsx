@@ -159,12 +159,11 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
                     try {
                         const msg = JSON.parse(event.data);
 
-                        // DEBUG: Uncomment this if streams are still not showing
-                        // console.log("Stream Msg:", msg, "Target Node:", nodeId);
+                        // Check for both camelCase and snake_case to be safe
+                        const targetNodeId = msg.data?.nodeId || msg.data?.node_id;
 
                         // Filter: Only show logs for THIS specific node
-                        // FIX: Ensure backend sends 'nodeId' exactly as expected
-                        if (msg.type === "node_log" && msg.data?.nodeId === nodeId) {
+                        if (msg.type === "node_log" && targetNodeId === nodeId) {
 
                             // FIX: Xterm needs \r\n for newlines, backend usually sends \n
                             let logText = msg.data.log || "";

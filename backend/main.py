@@ -5,7 +5,7 @@ from database.connection import db
 from models.workflow import Workflow, WorkflowSummary
 from contextlib import asynccontextmanager
 from typing import List
-from app.schemas.command import GenerateCommandRequest, UIResponse, UIRender, ExecutionMetadata
+from nodes.command.schema import GenerateCommandRequest, UIResponse, UIRender, ExecutionMetadata
 from app.core.session_manager import PtySession
 from engine.builder import GraphBuilder
 from langgraph.checkpoint.mongodb import MongoDBSaver
@@ -238,7 +238,7 @@ async def get_system_info():
 async def generate_command_endpoint(request: GenerateCommandRequest):
     try:
         from app.core.system import get_system_fingerprint
-        from app.services.generator import generate_command
+        from nodes.command.service import generate_command
         
         # Use provided context or fall back to live detection
         fingerprint = request.system_context if request.system_context else get_system_fingerprint()
@@ -320,9 +320,28 @@ async def execute_workflow(workflow_data: dict):
         return {
             "thread_id": thread_id, 
             "status": final_state.get("execution_status", "COMPLETED"),
-            "logs": final_state.get("logs", [])
+            "logs": final_state.get("logs", []),
+            "results": final_state.get("results", {})
         }
     except Exception as e:
+        # Check for GraphInterrupt (which wraps NodeInterrupt)
+        if type(e).__name__ == "GraphInterrupt":
+            # The execution paused appropriately.
+            # We should return the current state, which should reflect the pause?
+            # Or manually return 'ATTENTION_REQUIRED'.
+            print(f"Workflow Paused/Interrupted: {e}")
+            
+            # Retrieve the latest state to get logs up to this point
+            current_state = await graph.aget_state(config)
+            
+            return {
+                "thread_id": thread_id,
+                "status": "ATTENTION_REQUIRED",
+                "logs": current_state.values.get("logs", []),
+                "results": current_state.values.get("results", {}),
+                "error": str(e)
+            }
+            
         return {"status": "FAILED", "error": str(e), "thread_id": thread_id}
 
 @app.post("/api/v1/workflow/resume/{thread_id}")
@@ -350,7 +369,21 @@ async def resume_workflow(thread_id: str, payload: dict):
     graph = builder.build(workflow_data)
     
     # 3. RESUME EXECUTION
-    config = {"configurable": {"thread_id": thread_id}}
+    # Tier 4: Inject WebSocket Emitter (Critical for Resume Streaming)
+    async def emit_to_frontend(event: str, data: dict):
+        import json
+        try:
+            payload = json.dumps({"type": event, "data": data})
+            await manager.broadcast(payload)
+        except Exception as e:
+            print(f"Emit error: {e}")
+
+    config = {
+        "configurable": {
+            "thread_id": thread_id,
+            "emit_event": emit_to_frontend
+        }
+    }
     
     # Check if thread exists/is paused
     # graph.aget_state is async

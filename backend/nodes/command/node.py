@@ -1,7 +1,7 @@
 from typing import Dict, Any, List
 import re
 import asyncio
-from ..protocol import FlowXNode, ValidationResult, RuntimeContext
+from engine.protocol import FlowXNode, ValidationResult, RuntimeContext
 
 class CommandNode(FlowXNode):
     def validate(self, data: Dict[str, Any]) -> ValidationResult:
@@ -59,8 +59,18 @@ class CommandNode(FlowXNode):
         
         # 3. PREPARE COMMAND
         final_cmd = command
-        if sudo_pass and "sudo" in command:
-             final_cmd = f"echo '{sudo_pass}' | sudo -S {command}"
+        if "sudo" in command:
+            if sudo_pass:
+                # Case A: We have a password. Automate the input.
+                # -S: Read from stdin
+                # -p '': Suppress the "Password:" prompt text so it doesn't leak into logs
+                final_cmd = f"echo '{sudo_pass}' | sudo -S -p '' {command}"
+            else:
+                # Case B: No password yet. STOP IT FROM ASKING.
+                # -n: Non-interactive mode. 
+                # If a password is required, sudo will exit IMMEDIATELY with status 1
+                # instead of hanging the server waiting for input.
+                final_cmd = command.replace("sudo", "sudo -n")
         
         print(f"[CommandNode] Execution Started: {node_id}")
         print(f"[CommandNode] CMD: {final_cmd}")

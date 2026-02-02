@@ -57,6 +57,9 @@ interface WorkflowState {
     // System Context
     systemContext: any | null;
     setSystemContext: (context: any) => void;
+
+    // Connectivity
+    connectGlobalSocket: () => void;
 }
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
@@ -334,17 +337,33 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
             // So we should update ALL nodes with the thread_id?
 
             const threadId = response.thread_id;
+            const nodeResults = response.results || {};
 
             set(state => ({
-                nodes: state.nodes.map(node => ({
-                    ...node,
-                    data: {
-                        ...node.data,
-                        thread_id: threadId,
-                        execution_status: response.status === 'COMPLETED' ? 'completed' : 'running'
-                        // This is a naive update. Real update needs granular node mapping.
+                nodes: state.nodes.map(node => {
+                    const result = nodeResults[node.id];
+                    let newStatus = node.data.execution_status;
+
+                    if (result) {
+                        newStatus = result.status === 'success' ? 'completed' : 'failed';
+                    } else if (response.status === 'COMPLETED') {
+                        // If no specific result but workflow done, assume completed? 
+                        // Or keep as is? Better to only update if we have a result 
+                        // or if we are resetting. 
+                        // For now, if we have a result, use it.
+                        // If not, and workflow is done, maybe it didn't run? (e.g. branch skipped)
                     }
-                }))
+
+                    return {
+                        ...node,
+                        data: {
+                            ...node.data,
+                            thread_id: threadId,
+                            execution_status: newStatus,
+                            // Optionally store exit code if needed
+                        }
+                    }
+                })
             }));
 
         } catch (error) {
@@ -359,5 +378,58 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         if (!id || id === activeId) {
             set({ isDirty: false });
         }
+    },
+
+    connectGlobalSocket: () => {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.hostname;
+        const port = '8000';
+        const wsUrl = `${protocol}//${host}:${port}/ws/workflow`;
+
+        console.log("Connecting to Global Workflow Socket:", wsUrl);
+        const ws = new WebSocket(wsUrl);
+
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+
+                // REACTIVE STATE UPDATES
+                if (msg.type === "node_status") {
+                    const { nodeId, status } = msg.data;
+
+                    set(state => ({
+                        nodes: state.nodes.map(n =>
+                            n.id === nodeId
+                                ? { ...n, data: { ...n.data, execution_status: status } }
+                                : n
+                        )
+                    }));
+                }
+
+                // HANDLE SUDO / INTERRUPT REQUESTS
+                if (msg.type === "interrupt") {
+                    const { nodeId, thread_id } = msg.data;
+                    set(state => ({
+                        nodes: state.nodes.map(n =>
+                            n.id === nodeId
+                                ? { ...n, data: { ...n.data, execution_status: 'attention_required', thread_id: thread_id } }
+                                : n
+                        )
+                    }));
+                    // Open the Resume Overlay automatically?
+                    // The UI should react to 'attention_required' status.
+                }
+
+                // Append logs to visual history? 
+                // That might be expensive if many logs. 
+                // For now, we rely on TerminalComponent for live viewing.
+
+            } catch (e) {
+                console.error("Global Socket Parse Error", e);
+            }
+        };
+
+        ws.onopen = () => console.log("Global Socket Connected");
+        ws.onerror = (e) => console.error("Global Socket Error", e);
     }
 }));

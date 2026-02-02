@@ -60,27 +60,81 @@ class GraphBuilder:
                 
                 # Execute logic (Protocol 'execute' method)
                 try:
+                    # EMIT STATUS: RUNNING
+                    if emit_event:
+                        await emit_event("node_status", {
+                            "nodeId": _node_id,
+                            "status": "running"
+                        })
+
                     print(f"--- [GraphBuilder] Executing Node: {_node_id} ---")
                     result = await instance.execute(execution_state, _node_data)
                     print(f"--- [GraphBuilder] Node {_node_id} COMPLETED. Status: {result.get('status')} ---")
                     
+                    # EMIT STATUS: COMPLETED/FAILED
+                    if emit_event:
+                        await emit_event("node_status", {
+                            "nodeId": _node_id,
+                            "status": "completed" if result.get("status") == "success" else "failed"
+                        })
+
                     # Log result
                     log_entry = {
-                        "node_id": _node_id,
+                        "nodeId": _node_id, # FIX: camelCase matches frontend
                         "timestamp": "iso-time-placeholder", # TODO: Real time
                         "message": result.get("stdout", "") or str(result)
                     }
                     
                     # Update state (Merge semantics)
+                    # We need to retrieve existing results first? 
+                    # LangGraph merges top-level keys. 
+                    # To merge into a dict 'results', we might need to be careful if LangGraph overwrites the whole dict.
+                    # Standard StateGraph merges keys. 'results' is a key. 
+                    # If we return {"results": {...}}, it replaces? Or merges?
+                    # Dicts in TypedDict state usually replace unless using a reducer.
+                    # For simplicity, we assume we return the *new* entry to be merged by a reducer if one existed,
+                    # but here we might need to read the current state's results to append?
+                    # Actually, let's just use a dedicated key per node? No, dynamic keys are hard.
+                    
+                    # Better aproach for now: Read 'results' from state, update it, return it.
+                    current_results = state.get("results", {}) or {}
+                    current_results[_node_id] = {
+                        "status": result.get("status", "unknown"),
+                        "exit_code": result.get("exit_code"),
+                        "timestamp": "iso-time-placeholder"
+                    }
+
                     return {
                         "logs": [log_entry],
-                        "execution_status": "RUNNING"
+                        "execution_status": "RUNNING",
+                        "results": current_results
                     }
+                        
                 except Exception as e:
+                    # Check if it's a NodeInterrupt (from sudo)
+                    # We must re-raise it so LangGraph can handle the suspension/checkpointing.
+                    if type(e).__name__ == "NodeInterrupt":
+                        print(f"!!! [GraphBuilder] Node {_node_id} INTERRUPTED: {e} !!!")
+                        
+                        # EMIT STATUS: ATTENTION_REQUIRED
+                        if emit_event:
+                            await emit_event("interrupt", {
+                                "nodeId": _node_id,
+                                "thread_id": config.get("configurable", {}).get("thread_id", "unknown"),
+                                "reason": str(e)
+                            })
+                            
+                        raise e
+                        
                     print(f"!!! [GraphBuilder] Node {_node_id} FAILED: {e} !!!")
-                    # If it's a NodeInterrupt (from sudo), this block might not catch it 
-                    # if LangGraph catches it first. Ideally we let it bubble up?
-                    # But for generic errors:
+                    
+                    # EMIT STATUS: FAILED
+                    if emit_event:
+                        await emit_event("node_status", {
+                            "nodeId": _node_id,
+                            "status": "failed"
+                        })
+
                     import traceback
                     traceback.print_exc()
                     return {
