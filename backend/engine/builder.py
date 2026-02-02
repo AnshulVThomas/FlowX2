@@ -145,7 +145,7 @@ class GraphBuilder:
             # Register with Graph
             graph.add_node(node_id, node_wrapper)
 
-        # 2. Add Edges
+        # 2. Add Edges (Smart Conditional Routing)
         # Find Start Node to map START -> node_id
         start_node_id = None
         for node in nodes:
@@ -155,11 +155,47 @@ class GraphBuilder:
         
         if start_node_id:
             graph.add_edge(START, start_node_id)
-            
+
+        # Group edges by source to handle branching logic
+        edges_by_source = {}
         for edge in edges:
-            source = edge["source"]
-            target = edge["target"]
-            graph.add_edge(source, target)
+            src = edge["source"]
+            if src not in edges_by_source:
+                edges_by_source[src] = []
+            edges_by_source[src].append(edge)
+
+        for source_id, source_edges in edges_by_source.items():
+            # Pre-calculate targets for this source
+            all_targets = [e["target"] for e in source_edges]
+            conditional_targets = [e["target"] for e in source_edges if e.get("data", {}).get("behavior", "conditional") == "conditional"]
+            force_targets = [e["target"] for e in source_edges if e.get("data", {}).get("behavior") == "force"]
+            failure_targets = [e["target"] for e in source_edges if e.get("data", {}).get("behavior") == "failure"]
+
+            # Define Router Function (Closure captures specific targets)
+            def smart_router(state: FlowState, _src=source_id, _cond=conditional_targets, _force=force_targets, _fail=failure_targets):
+                results = state.get("results", {})
+                source_result = results.get(_src)
+
+                # Default to conditional flow if no result
+                if not source_result:
+                    return _cond + _force
+                
+                status = source_result.get("status")
+                
+                # BRANCHING LOGIC:
+                # 1. Success -> Run Conditional + Force (Skip Failure)
+                # 2. Failed -> Run Force + Failure (Skip Conditional)
+                if status == "success":
+                    return _cond + _force
+                else:
+                    return _force + _fail
+
+            # Register conditional edges
+            graph.add_conditional_edges(
+                source_id,
+                smart_router,
+                path_map={t: t for t in all_targets} # Valid next steps
+            )
 
         # 3. Compile
         return graph.compile(checkpointer=self.checkpointer, interrupt_before=[])

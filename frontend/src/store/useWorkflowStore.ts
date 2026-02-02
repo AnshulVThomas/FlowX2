@@ -49,6 +49,7 @@ interface WorkflowState {
     updateWorkflowName: (id: string, name: string) => void;
     setWorkflows: (workflows: Workflow[] | WorkflowSummary[]) => void;
     updateNodeData: (id: string, data: Partial<any>, shouldSave?: boolean) => void; // <--- New Action
+    toggleEdgeType: (edgeId: string) => void;
 
     // Saving & State
     saveActiveWorkflow: () => Promise<void>;
@@ -192,8 +193,16 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     },
 
     onConnect: (connection) => {
+        const newEdge = {
+            ...connection,
+            id: uuidv4(),
+            type: 'default',
+            data: { behavior: 'conditional' },
+            style: { stroke: '#22c55e', strokeDasharray: '5,5', strokeWidth: 2 }, // Default: Green Dotted
+            animated: false,
+        } as Edge;
         set((state) => ({
-            edges: addEdge(connection, state.edges),
+            edges: addEdge(newEdge, state.edges),
             isDirty: true
         }));
     },
@@ -220,6 +229,40 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         if (shouldSave) {
             get().saveActiveWorkflow();
         }
+    },
+
+    toggleEdgeType: (edgeId: string) => {
+        set((state) => ({
+            edges: state.edges.map((edge) => {
+                if (edge.id !== edgeId) return edge;
+
+                const isCurrentlyConditional = edge.data?.behavior !== 'force' && edge.data?.behavior !== 'failure';
+                const isForce = edge.data?.behavior === 'force';
+
+                // Cycle: Conditional -> Force -> Failure -> Conditional
+                let newBehavior = 'conditional';
+                if (isCurrentlyConditional) newBehavior = 'force';
+                else if (isForce) newBehavior = 'failure';
+
+                let style = { stroke: '#22c55e', strokeDasharray: '5,5', strokeWidth: 2 }; // Default: Conditional
+
+                if (newBehavior === 'force') {
+                    style = { stroke: '#f59e0b', strokeDasharray: '5,5', strokeWidth: 2 }; // Orange
+                } else if (newBehavior === 'failure') {
+                    style = { stroke: '#ef4444', strokeDasharray: '5,5', strokeWidth: 2 }; // Red
+                }
+
+                return {
+                    ...edge,
+                    type: 'default',
+                    data: { ...edge.data, behavior: newBehavior },
+                    style: style,
+                    label: undefined,
+                    labelStyle: undefined
+                };
+            }),
+            isDirty: true
+        }));
     },
 
     setWorkflows: (workflows) => {

@@ -9,3 +9,8 @@ body,
   padding: 0;
   overflow: hidden;
 }
+
+/* Thicker edge when selected */
+.react-flow__edge.selected .react-flow__edge-path {
+    stroke-width: 4 !important;
+}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ReactFlow,
     MiniMap,
@@ -37,6 +37,19 @@ export function Canvas() {
     const addNode = useWorkflowStore((state) => state.addNode);
     const setSystemContext = useWorkflowStore((state) => state.setSystemContext);
     const systemContext = useWorkflowStore((state) => state.systemContext);
+    const toggleEdgeType = useWorkflowStore((state) => state.toggleEdgeType);
+
+    const [edgeTooltip, setEdgeTooltip] = useState<{ x: number; y: number; edgeId: string } | null>(null);
+
+    // Dynamic Label Logic
+    const hoveredEdge = edgeTooltip ? edges.find(e => e.id === edgeTooltip.edgeId) : null;
+    let tooltipLabel = '';
+    if (hoveredEdge) {
+        const behavior = hoveredEdge.data?.behavior || 'conditional';
+        if (behavior === 'force') tooltipLabel = 'Always Run (Force)';
+        else if (behavior === 'failure') tooltipLabel = 'Failure Only';
+        else tooltipLabel = 'Conditional (Success Only)';
+    }
 
     useEffect(() => {
         // Only fetch if we haven't already (or force it if needed, but on app load once is fine)
@@ -114,7 +127,43 @@ export function Canvas() {
                 panOnDrag={[1, 2]}
                 selectNodesOnDrag={false}
                 onlyRenderVisibleElements={true}
+                onEdgeDoubleClick={(_, edge) => toggleEdgeType(edge.id)}
+                onEdgeMouseEnter={(event, edge) => {
+                    setEdgeTooltip({
+                        x: event.clientX,
+                        y: event.clientY - 40,
+                        edgeId: edge.id
+                    });
+                }}
+                onEdgeMouseLeave={() => setEdgeTooltip(null)}
+                onEdgeMouseMove={(event) => {
+                    if (edgeTooltip) {
+                        setEdgeTooltip(prev => prev ? { ...prev, x: event.clientX, y: event.clientY - 40 } : null);
+                    }
+                }}
             >
+                {edgeTooltip && tooltipLabel && (
+                    <div
+                        style={{
+                            position: 'fixed',
+                            top: edgeTooltip.y,
+                            left: edgeTooltip.x,
+                            transform: 'translate(-50%, 0)',
+                            background: '#333',
+                            color: 'white',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            pointerEvents: 'none',
+                            zIndex: 1000,
+                            whiteSpace: 'nowrap',
+                            userSelect: 'none',
+                            WebkitUserSelect: 'none',
+                        }}
+                    >
+                        {tooltipLabel}
+                    </div>
+                )}
                 <Controls />
                 <MiniMap />
                 <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
