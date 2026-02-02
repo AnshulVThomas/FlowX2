@@ -7,6 +7,8 @@ export function ProcessSidebar() {
     const isOpen = useWorkflowStore((state) => state.isProcessSidebarOpen);
     const toggle = useWorkflowStore((state) => state.toggleProcessSidebar);
     const nodes = useWorkflowStore((state) => state.nodes);
+    const validationStatus = useWorkflowStore((state) => state.validationStatus);
+    const validationErrors = useWorkflowStore((state) => state.validationErrors);
 
     // Filter for "Process" like nodes (Command Nodes) and cast type
     const processNodes = nodes.filter((n): n is CommandNodeData => n.type === 'commandNode');
@@ -64,7 +66,7 @@ export function ProcessSidebar() {
                                         {node.data.ui_render?.title || 'Command Process'}
                                     </span>
                                     {/* Validation Status Icon */}
-                                    <ValidationShield nodeId={node.id} />
+                                    <ValidationShield status={validationStatus[node.id]} errors={validationErrors?.[node.id]} />
                                 </div>
                                 <div className="flex items-center justify-between text-xs">
                                     <span className="text-gray-500 font-mono truncate max-w-[150px]">

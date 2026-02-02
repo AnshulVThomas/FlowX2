@@ -1,15 +1,13 @@
 import { ShieldCheck, ShieldX } from 'lucide-react';
-import { useWorkflowStore } from '../store/useWorkflowStore';
 // shadcn/ui tooltip components assumed, or using native title for now as per instructions
 
 interface ValidationShieldProps {
-    nodeId: string;
+    status: string | undefined;
+    errors?: string[];
     className?: string;
 }
 
-export const ValidationShield = ({ nodeId, className = "" }: ValidationShieldProps) => {
-    const status = useWorkflowStore(state => state.validationStatus[nodeId]);
-    const errors = useWorkflowStore(state => state.validationErrors?.[nodeId]);
+export const ValidationShield = ({ status, errors, className = "" }: ValidationShieldProps) => {
     const displayErrors = errors || [];
 
     if (!status) return null;

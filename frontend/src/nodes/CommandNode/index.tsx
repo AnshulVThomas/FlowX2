@@ -222,8 +222,9 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
 
     // Subscribe to validation status
 
-    // Subscribe to validation status for ring styling
+    // Subscribe to validation status for ring styling and shield
     const validationStatus = useWorkflowStore((state) => state.validationStatus[id]);
+    const validationErrors = useWorkflowStore((state) => state.validationErrors?.[id]);
 
     // --- STYLES ---
     let ringClass = "ring-1 ring-stone-200";
@@ -263,7 +264,8 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
 
             {/* Shield Icon for Validation Status */}
             <ValidationShield
-                nodeId={id}
+                status={validationStatus}
+                errors={validationErrors}
                 className="absolute -top-3 -right-3 z-50 transition-all duration-300 transform hover:scale-110"
             />
 

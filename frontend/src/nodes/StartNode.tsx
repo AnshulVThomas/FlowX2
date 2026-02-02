@@ -15,6 +15,8 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
     // 2. Select actions
     const saveActiveWorkflow = useWorkflowStore((state) => state.saveActiveWorkflow);
     const validateGraph = useWorkflowStore((state) => state.validateGraph);
+    const validationStatus = useWorkflowStore((state) => state.validationStatus[id]);
+    const validationErrors = useWorkflowStore((state) => state.validationErrors?.[id]);
 
     const [isValidating, setIsValidating] = useState(false);
 
@@ -92,7 +94,8 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
         `}>
             {/* Shield Icon for Self-Validation */}
             <ValidationShield
-                nodeId={id}
+                status={validationStatus}
+                errors={validationErrors}
                 className="absolute -top-2 -right-2 z-10 scale-0 animate-in zoom-in duration-300 fill-mode-forwards"
             />
 
