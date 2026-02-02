@@ -14,14 +14,13 @@ This document tracks the specific sequence of tasks for the LangGraph integratio
 
 ## Phase 2: Tier 1 - Validation Layer
 
-**2. Validator Implementation**
+**2. Validator Implementation (Modular Protocol)**
    - **Action**: Created `backend/engine` directory.
-   - **Action**: Implemented `backend/engine/validator.py` with `validate_workflow` function.
-   - **Logic**:
-     - **Topological**: Enforces exactly one Start Node (CRITICAL).
-     - **Connectivity**: Warns about orphan nodes (WARNING).
-     - **Command Check**: Validates non-empty commands and checks for regex placeholders `<...>` (CRITICAL).
-   - **Outcome**: Returns `True` or raises `400 HTTPException` with schema-compliant error list.
+   - **Action**: Implemented `backend/engine/protocol.py` defining `FlowXNode` abstract base class.
+   - **Action**: Implemented `backend/engine/registry.py` for dynamic node loading.
+   - **Action**: Created concrete strategies: `StartNode` and `CommandNode`.
+   - **Action**: Refactored `backend/engine/validator.py` to use the Registry.
+   - **Outcome**: Validation is now decentralized and strategy-based. Passed 8 unit tests.
    |
    |
    v

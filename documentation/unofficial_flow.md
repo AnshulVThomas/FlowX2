@@ -150,3 +150,20 @@ The `CommandNode` has been upgraded to providing rich, real-time visual feedback
     - **Error**: Solid Red border (transient).
 - **Performance**: Optimized using `memo` and refined CSS transitions to maintain 60fps even during complex animations.
 
+### 9. FlowX Execution Engine Architecture (Tier 1: Modular Protocol)
+
+To support headless, event-driven automation, the backend has been refactored to use a **Modular Node Protocol**.
+
+#### A. The Modular Contract (`FlowXNode`)
+Instead of hardcoded validation logic, every node type is now a self-contained class inheriting from the `FlowXNode` abstract base class.
+- **`validate(data)`**: Pure function returning a list of errors/warnings.
+- **`execute(context, payload)`**: The logic to run when triggered.
+- **`get_execution_mode()`**: Metadata (e.g., `requires_pty`).
+
+#### B. The Node Registry
+A Singleton `NodeRegistry` dynamically maps node type strings (e.g., `"commandNode"`) to their backend Python classes. This allows the system to be easily extended with new node types (Plugins) without modifying the core engine.
+
+#### C. Validation Engine
+The `validate_workflow` function has been rewritten to:
+1.  **Topology Checks**: Validates global graph structure (e.g., Single Start Node).
+2.  **Delegated Validation**: Iterates through nodes and delegates specific checks to the registered Node Strategy.
