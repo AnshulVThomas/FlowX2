@@ -135,11 +135,17 @@ class AsyncGraphExecutor:
                 })
             
             # Context
-            context = {
+            # Expected structure by CommandNode: ctx.get("context", {}).get("emit_event")
+            runtime_context = {
                 "thread_id": self.thread_id,
                 "emit_event": self.emit_event,
-                "state": {"results": self.results}, # Pass global results so far
-                "system_fingerprint": {} # Placeholder
+                "system_fingerprint": {} 
+            }
+            
+            # The 'state' dictionary passed to the node
+            context = {
+                "context": runtime_context,
+                "state": {"results": self.results} 
             }
             
             # Execute
