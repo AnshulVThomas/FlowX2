@@ -357,12 +357,10 @@ async def execute_workflow(workflow_data: dict, background_tasks: BackgroundTask
         print(f"  [{source_display}] {arrow} [{target_display}]")
     print("="*50 + "\n")
 
-    builder = GraphBuilder(checkpointer=checkpointer)
-    graph = builder.build(workflow_data)
-    
+    # --- ASYNC EXECUTOR REPLACEMENT ---
+    from engine.async_runner import AsyncGraphExecutor
     import uuid
     thread_id = str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id}}
     
     # Tier 4: Inject WebSocket Emitter
     async def emit_to_frontend(event: str, data: dict):
@@ -376,25 +374,23 @@ async def execute_workflow(workflow_data: dict, background_tasks: BackgroundTask
         except Exception as e:
             print(f"Emit error: {e}")
 
-    # Inject into Config (Ephemeral), NOT State (Persistent)
-    config["configurable"]["emit_event"] = emit_to_frontend
-    
-    initial_state = {
-        "context": {}, 
-        "logs": [], 
-        "execution_status": "RUNNING",
-        "current_node_id": "START"
-    }
+    executor = AsyncGraphExecutor(
+        workflow_data, 
+        emit_event=emit_to_frontend,
+        thread_id=thread_id
+    )
 
     # Wrapper to run execution and handle registration
     async def run_execution():
         try:
-            final_state = await graph.ainvoke(initial_state, config=config)
+            # Execute the graph
+            result_stats = await executor.execute()
+            
             return {
                 "thread_id": thread_id, 
-                "status": final_state.get("execution_status", "COMPLETED"),
-                "logs": final_state.get("logs", []),
-                "results": final_state.get("results", {})
+                "status": result_stats.get("status", "COMPLETED"),
+                "logs": result_stats.get("errors", []), # Mapping errors to logs for now
+                "results": result_stats.get("results", {})
             }
         except asyncio.CancelledError:
             print(f"Workflow Execution Cancelled: {thread_id}")
@@ -402,21 +398,9 @@ async def execute_workflow(workflow_data: dict, background_tasks: BackgroundTask
             await emit_to_frontend("node_status", {"nodeId": "system", "status": "cancelled"}) 
             return {"status": "CANCELLED", "thread_id": thread_id}
         except Exception as e:
-            # Check for GraphInterrupt (which wraps NodeInterrupt)
-            if type(e).__name__ == "GraphInterrupt":
-                print(f"Workflow Paused/Interrupted: {e}")
-                
-                # Retrieve the latest state to get logs up to this point
-                current_state = await graph.aget_state(config)
-                
-                return {
-                    "thread_id": thread_id,
-                    "status": "ATTENTION_REQUIRED",
-                    "logs": current_state.values.get("logs", []),
-                    "results": current_state.values.get("results", {}),
-                    "error": str(e)
-                }
-                
+            print(f"Workflow execution failed: {e}")
+            import traceback
+            traceback.print_exc()
             return {"status": "FAILED", "error": str(e), "thread_id": thread_id}
         finally:
             # Cleanup registry
