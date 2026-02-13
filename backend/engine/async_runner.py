@@ -137,14 +137,19 @@ class AsyncGraphExecutor:
                     return
 
             # 3. SETUP & EXECUTE
-            # print(f"[{node_id}] Executing...")
+            print(f"[BACKEND] [{node_id}] Executing...")
             
             # Retrieve node strategy from registry
             node_class = NodeRegistry.get_node(node_type)
             if not node_class:
                 raise ValueError(f"Unknown node type: {node_type}")
-                
-            instance = node_class(node_data)
+            
+            # INJECT ID INTO DATA so the node knows its own ID for logging
+            # (CommandNode relies on data.get('id') to tag logs)
+            init_data = node_data.copy()
+            init_data["id"] = node_id
+            
+            instance = node_class(init_data)
             
             # Notify Start
             if self.emit_event:
@@ -186,6 +191,7 @@ class AsyncGraphExecutor:
             
             # 5. EMIT SUCCESS & PERSIST
             status = "completed" if result.get("status") == "success" else "failed"
+            print(f"[BACKEND] [{node_id}] Finished with status: {status}")
             if self.emit_event:
                 await self.emit_event("node_status", {
                     "nodeId": node_id, "status": status

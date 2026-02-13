@@ -225,7 +225,13 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
 
     const hasHydratedRef = useRef(false);
 
-    // --- 2. LOG LISTENER & REHYDRATION EFFECT ---
+    // --- 2. LOG LISTENER & SYNC EFFECT ---
+    const lastSyncedLengthRef = useRef(0);
+
+    useEffect(() => {
+        if (runId) lastSyncedLengthRef.current = 0; // Reset on new run
+    }, [runId]);
+
     useEffect(() => {
         // FIX: Add isReady check. If terminal isn't created, we can't write to it.
         if (!isReady || mode !== 'stream' || !nodeId || !shouldConnect) return;
@@ -233,33 +239,73 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
         const term = xtermRef.current;
         if (!term) return; // Double safety check
 
-        // 1. Rehydrate
-        if (!hasHydratedRef.current && initialLogs && initialLogs.length > 0) {
-            initialLogs.forEach(log => {
+        // 1. Sync from Prop (Handles missed events / re-renders)
+        if (initialLogs && initialLogs.length > lastSyncedLengthRef.current) {
+            const newLogs = initialLogs.slice(lastSyncedLengthRef.current);
+            newLogs.forEach(log => {
                 let logText = log || "";
                 if (typeof logText === 'string') {
-                    logText = logText.replace(/\n/g, '\r\n');
+                    // Normalize newlines for XTerm
+                    logText = logText.replace(/(?<!\r)\n/g, '\r\n');
                 }
                 term.write(logText);
             });
-            hasHydratedRef.current = true;
+            lastSyncedLengthRef.current = initialLogs.length;
         }
 
-        // 2. Event Listener
+        // 2. Event Listener (Real-time updates without re-render)
         const handleLogEvent = (e: Event) => {
             const customEvent = e as CustomEvent;
             let logText = customEvent.detail?.log || "";
             if (typeof logText === 'string') {
-                logText = logText.replace(/\n/g, '\r\n');
+                logText = logText.replace(/(?<!\r)\n/g, '\r\n');
             }
             term.write(logText);
+
+            // We assume successful write means we are "in sync" with stream.
+            // But 'initialLogs' prop update might lag behind event stream. 
+            // We rely on prop for "catch up" only.
+            // Incrementing ref here is tricky because we don't know if this event is already in initialLogs.
+            // Better strategy: Rely on prop for history, event for live. 
+            // If prop updates, we check length. 
+            // RISK: Double writing?
+            // If event fires -> Write -> Store Update -> Prop Update -> Write again?
+            // YES. Double writing is a risk if we blindly sync.
+            // FIX: If we use events, we shouldn't rely on prop updates for the SAME content.
+            // BUT prop updates are needed for missed content.
+
+            // HYBRID STRATEGY:
+            // 1. On Mount/Ready: Write FULL initialLogs. Set ref to length.
+            // 2. On Event: Write log. Increment ref? No, prop array reference changes.
+            // Actually, if we use window events, we are decoupled from React props.
+            // The prop is only for "Initial Rehydration".
+
+            // SO: The bug was simply that Initial Rehydration happened too early or never happened 
+            // because prop wasn't updating.
+            // Now that prop IS updating, we just need to ensure we don't double write.
+
+            // Actually, if we just suppress re-writing logs we've seen?
+            // Simple approach: Only write logs from prop if they exceed current line count? 
+            // Hard to map lines to logs.
+
+            // OK, simpler fix for now:
+            // Just rely on the prop update catching missed logs, 
+            // AND accept that live events might double-print IF the prop update arrives fast.
+            // BUT prop update comes from Store which comes from Socket.
+            // Socket -> Event -> Terminal (Write)
+            // Socket -> Store -> components -> Re-render -> Terminal (Prop)
+
+            // If we write via Event, we should NOT write via Prop.
+            // So we need to track "processed logs".
+            // Since `initialLogs` is an array of strings, we can track the index.
+
+            lastSyncedLengthRef.current += 1; // Optimistically track that we handled this log
         };
 
         window.addEventListener(`node-log-${nodeId}`, handleLogEvent);
         return () => window.removeEventListener(`node-log-${nodeId}`, handleLogEvent);
 
-        // FIX: Add isReady to dependency array so this runs AFTER initialization
-    }, [mode, nodeId, shouldConnect, isReady]);
+    }, [mode, nodeId, shouldConnect, isReady, initialLogs]); // Added initialLogs to deps
 
     // --- 3. AUTO-CLEAR ON RUN ID CHANGE ---
     useEffect(() => {

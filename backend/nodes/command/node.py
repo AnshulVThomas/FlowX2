@@ -86,10 +86,18 @@ class CommandNode(FlowXNode):
                     line = await stream.readline()
                     if not line: break
                     text = line.decode(errors='replace')
+                    
+                    # DEBUG LOG
+                    print(f"[BACKEND] Captured {type_label}: {text.strip()}")
+                    
                     if type_label == "stdout": output_buffer.append(text)
                     else: error_buffer.append(text)
+                    
                     if emit:
+                        print(f"[BACKEND] Emitting log for {node_id}")
                         await emit("node_log", {"nodeId": node_id, "log": text, "type": type_label})
+                    else:
+                        print(f"[BACKEND] CRITICAL: Emit function is missing for {node_id}")
 
             await asyncio.gather(
                 stream_pipe(process.stdout, "stdout"), 
@@ -97,6 +105,7 @@ class CommandNode(FlowXNode):
             )
             
             exit_code = await process.wait()
+            print(f"[BACKEND] Process finished with code {exit_code}")
             return exit_code, "".join(output_buffer).strip(), "".join(error_buffer).strip()
 
         try:

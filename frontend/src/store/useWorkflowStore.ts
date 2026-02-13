@@ -507,6 +507,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         ws.onmessage = (event) => {
             try {
                 const msg = JSON.parse(event.data);
+                console.log("[FRONTEND] WS Message:", msg.type, msg.data);
 
                 // REACTIVE STATE UPDATES
                 if (msg.type === "node_status") {

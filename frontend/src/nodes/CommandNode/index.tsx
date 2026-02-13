@@ -425,10 +425,12 @@ function propsAreEqual(prev: NodeProps<CommandNodeData>, next: NodeProps<Command
         prev.data.ui_render?.code_block === next.data.ui_render?.code_block &&
         prev.data.execution_status === next.data.execution_status &&
         prev.data.thread_id === next.data.thread_id &&
-        prev.data.history === next.data.history
-        // Note: We deliberately do NOT check data.logs here.
-        // If only logs update, the Node Container doesn't need to re-render.
-        // The TerminalComponent listens to window events for log updates.
+        prev.data.thread_id === next.data.thread_id &&
+        prev.data.history === next.data.history &&
+        // OPTIMIZATION: Check log length to trigger updates for buffered logs that might have been missed by event listener
+        // But only if we are actually viewing them (optimization opportunity: check if terminal is open?)
+        // For correctness, we should verify. 
+        (prev.data.logs?.length || 0) === (next.data.logs?.length || 0)
     );
 }
 
