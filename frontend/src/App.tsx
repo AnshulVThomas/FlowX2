@@ -38,7 +38,7 @@ function App() {
     <ReactFlowProvider>
       <div className="flex flex-col h-screen w-screen overflow-hidden bg-black/90">
         <Navbar />
-        <div className="flex flex-grow h-full pt-16 relative">
+        <div className="flex flex-grow h-full relative">
           <Sidebar />
           <Canvas />
           <ProcessSidebar />
