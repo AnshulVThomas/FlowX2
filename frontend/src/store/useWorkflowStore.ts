@@ -297,7 +297,20 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         if (workflowIndex === -1) return;
 
         const currentMeta = workflows[workflowIndex];
-        const workflowToSave: Workflow = { ...currentMeta, nodes, edges };
+
+        // FIX: Sanitize nodes to remove ephemeral runtime state before saving
+        // This prevents "running" state from persisting if the page is reloaded
+        const cleanNodes = nodes.map(node => {
+            // Destructure to remove runtime fields
+            // We keep 'history' and 'command', but remove status indicators
+            const { execution_status, thread_id, ...restData } = node.data;
+            return {
+                ...node,
+                data: restData
+            };
+        });
+
+        const workflowToSave: Workflow = { ...currentMeta, nodes: cleanNodes, edges };
 
         try {
             await apiSaveWorkflow(workflowToSave);

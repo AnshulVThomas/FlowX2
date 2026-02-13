@@ -73,8 +73,13 @@ class CommandNode(FlowXNode):
 
             process = await asyncio.create_subprocess_shell(
                 cmd_to_run,
+                stdin=asyncio.subprocess.DEVNULL, # Force fail interactive prompts
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                # Detach from terminal only if NOT using Sudo Lock.
+                # If Sudo Lock is used, we need to stay in the session to inherit the ticket from SudoKeepAlive.
+                # If Sudo Lock is NOT used, we detach to ensure 'sudo' fails immediately instead of hanging.
+                start_new_session=(not use_sudo_lock)
             )
 
             # Streaming
