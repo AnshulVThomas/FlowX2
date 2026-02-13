@@ -283,6 +283,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                     uiRender={uiRender}
                     isTerminalOpen={isTerminalOpen}
                     showHistory={showHistory}
+                    sudoLock={data.sudoLock}
                     setPrompt={setPrompt}
                     updateNodeData={updateNodeData}
                     handleGenerate={handleGenerate}

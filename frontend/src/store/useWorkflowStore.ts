@@ -30,7 +30,7 @@ interface WorkflowState {
 
     // Actions
     validateGraph: () => Promise<void>;
-    executeGraph: () => Promise<void>;
+    executeGraph: (sudoPassword?: string) => Promise<void>;
     abortWorkflow: () => Promise<void>;
     toggleProcessSidebar: () => void;
 
@@ -344,7 +344,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         }
     },
 
-    executeGraph: async () => {
+    executeGraph: async (sudoPassword?: string) => {
         const { activeId, nodes, edges } = get();
 
         // 1. Validate first? Or assume component did it?
@@ -375,7 +375,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         };
 
         try {
-            const response = await executeWorkflow(workflowData);
+            const response = await executeWorkflow(workflowData, sudoPassword);
 
             // 3. Update Nodes based on initial response
             // If response is RUNNING/PAUSED, we might have logs or state

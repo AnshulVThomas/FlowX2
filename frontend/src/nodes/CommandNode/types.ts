@@ -5,6 +5,7 @@ export type CommandNodeData = Node<{
     command?: string;
     prompt?: string;
     locked?: boolean;
+    sudoLock?: boolean; // Explicit Sudo Lock
     system_context?: any;
     ui_render?: {
         title: string;

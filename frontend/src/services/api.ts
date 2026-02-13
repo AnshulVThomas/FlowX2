@@ -168,12 +168,13 @@ export interface ExecutionResponse {
     results?: Record<string, any>;
 }
 
-export const executeWorkflow = async (workflow: any): Promise<ExecutionResponse> => {
+export const executeWorkflow = async (workflow: any, sudoPassword?: string): Promise<ExecutionResponse> => {
     try {
+        const payload = { ...workflow, sudo_password: sudoPassword };
         const response = await fetch(`${API_URL}/api/v1/workflow/execute`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(workflow),
+            body: JSON.stringify(payload),
         });
 
         if (!response.ok) {

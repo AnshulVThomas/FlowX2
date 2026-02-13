@@ -1,19 +1,19 @@
 import { useCallback, useMemo, useRef, useEffect, useState } from 'react'
-import ReactFlow, { 
-  addEdge, 
-  Background, 
-  Controls, 
-  MiniMap, 
-  useEdgesState, 
-  useNodesState 
+import ReactFlow, {
+  addEdge,
+  Background,
+  Controls,
+  MiniMap,
+  useEdgesState,
+  useNodesState
 } from 'reactflow'
 // Type-only imports to satisfy verbatimModuleSyntax
-import type { 
-  Connection, 
-  Edge, 
-  Node, 
-  OnConnect, 
-  ReactFlowInstance 
+import type {
+  Connection,
+  Edge,
+  Node,
+  OnConnect,
+  ReactFlowInstance
 } from 'reactflow'
 
 import { useNodeStore } from '../StateManagement/nodeStore'
@@ -26,15 +26,15 @@ import { exportFlowState } from '../StateManagement/exportState'
 
 import 'reactflow/dist/style.css'
 
-type DragNodeType = 
-  | 'default' 
-  | 'agent' 
-  | 'monitor' 
-  | 'command' 
-  | 'tool' 
-  | 'webhook' 
-  | 'database' 
-  | 'apiConfig' 
+type DragNodeType =
+  | 'default'
+  | 'agent'
+  | 'monitor'
+  | 'command'
+  | 'tool'
+  | 'webhook'
+  | 'database'
+  | 'apiConfig'
   | 'toolCircle';
 type PaletteItem = {
   label: string
@@ -145,17 +145,17 @@ export default function FlowCanvas() {
 
 
   // Callback to spawn settings nodes (API or Tool)
- const onSpawnSettings = useCallback((agentId: string, type: 'api' | 'tool') => {
+  const onSpawnSettings = useCallback((agentId: string, type: 'api' | 'tool') => {
     // We use the functional update pattern to get the latest nodes/edges
     setNodes((nds) => {
       const agentNode = nds.find(n => n.id === agentId);
       if (!agentNode) return nds;
 
       const newId = `${type}-${Date.now()}`;
-      
+
       // Prevent multiple API nodes if one already exists
       if (type === 'api' && nds.some(n => n.id.startsWith('api-') && n.id.includes(agentId))) {
-         return nds;
+        return nds;
       }
 
       const newNode: Node = {
@@ -181,62 +181,62 @@ export default function FlowCanvas() {
   }, [setNodes, setEdges]);
 
   const onDrop = useCallback((evt: React.DragEvent) => {
-  evt.preventDefault();
-  const type = evt.dataTransfer.getData('application/reactflow') as DragNodeType;
-  const label = evt.dataTransfer.getData('application/reactflow-label') || `${type} node`;
+    evt.preventDefault();
+    const type = evt.dataTransfer.getData('application/reactflow') as DragNodeType;
+    const label = evt.dataTransfer.getData('application/reactflow-label') || `${type} node`;
 
-  if (!type || !reactFlowInstanceRef.current) return;
+    if (!type || !reactFlowInstanceRef.current) return;
 
-  const position = reactFlowInstanceRef.current.screenToFlowPosition({
-    x: evt.clientX,
-    y: evt.clientY,
-  });
+    const position = reactFlowInstanceRef.current.screenToFlowPosition({
+      x: evt.clientX,
+      y: evt.clientY,
+    });
 
-  const newNode: Node = {
-    id: getId(),
-    type,
-    position,
-    // ✅ CLEAN: No functions here. Only JSON-serializable data.
-    data: type === 'agent' 
-      ? { label, apiKey: '', tools: [] } 
-      : { label }
-  };
+    const newNode: Node = {
+      id: getId(),
+      type,
+      position,
+      // ✅ CLEAN: No functions here. Only JSON-serializable data.
+      data: type === 'agent'
+        ? { label, apiKey: '', tools: [] }
+        : { label }
+    };
 
-  setNodes((nds) => nds.concat(newNode));
-}, [setNodes]); // reactFlowInstanceRef is a ref, so it doesn't need to be a dependency
+    setNodes((nds) => nds.concat(newNode));
+  }, [setNodes]); // reactFlowInstanceRef is a ref, so it doesn't need to be a dependency
 
 
-const isValidConnection = useCallback((connection: Connection) => {
-  const sourceNode = nodes.find((n) => n.id === connection.source);
-  const targetNode = nodes.find((n) => n.id === connection.target);
+  const isValidConnection = useCallback((connection: Connection) => {
+    const sourceNode = nodes.find((n) => n.id === connection.source);
+    // const targetNode = nodes.find((n) => n.id === connection.target);
 
-  // 1. RULE: Only apiConfig nodes can hit the 'api-handle' (Top Diamond)
-  if (connection.targetHandle === 'api-handle') {
-    return sourceNode?.type === 'apiConfig';
-  }
+    // 1. RULE: Only apiConfig nodes can hit the 'api-handle' (Top Diamond)
+    if (connection.targetHandle === 'api-handle') {
+      return sourceNode?.type === 'apiConfig';
+    }
 
-  // 2. RULE: Only toolCircle nodes can hit the 'tool-handle' (Bottom Box)
-  if (connection.targetHandle === 'tool-handle') {
-    return sourceNode?.type === 'toolCircle';
-  }
+    // 2. RULE: Only toolCircle nodes can hit the 'tool-handle' (Bottom Box)
+    if (connection.targetHandle === 'tool-handle') {
+      return sourceNode?.type === 'toolCircle';
+    }
 
-  // 3. RULE: Standard side handles (usually undefined or 'left'/'right') 
-  // should REJECT apiConfig and toolCircle nodes.
-  const isSpecialNode = sourceNode?.type === 'apiConfig' || sourceNode?.type === 'toolCircle';
-  
-  // If the target handle is NOT one of the special ones, but the source IS a special node, block it.
-  if (isSpecialNode && connection.targetHandle !== 'api-handle' && connection.targetHandle !== 'tool-handle') {
-    return false;
-  }
+    // 3. RULE: Standard side handles (usually undefined or 'left'/'right') 
+    // should REJECT apiConfig and toolCircle nodes.
+    const isSpecialNode = sourceNode?.type === 'apiConfig' || sourceNode?.type === 'toolCircle';
 
-  // 4. RULE: Prevent standard nodes from plugging into the special handles
-  if (!isSpecialNode && (connection.targetHandle === 'api-handle' || connection.targetHandle === 'tool-handle')) {
-    return false;
-  }
+    // If the target handle is NOT one of the special ones, but the source IS a special node, block it.
+    if (isSpecialNode && connection.targetHandle !== 'api-handle' && connection.targetHandle !== 'tool-handle') {
+      return false;
+    }
 
-  // Default: Allow standard left-to-right connections between normal nodes
-  return true;
-}, [nodes]);
+    // 4. RULE: Prevent standard nodes from plugging into the special handles
+    if (!isSpecialNode && (connection.targetHandle === 'api-handle' || connection.targetHandle === 'tool-handle')) {
+      return false;
+    }
+
+    // Default: Allow standard left-to-right connections between normal nodes
+    return true;
+  }, [nodes]);
 
 
   // Keyboard Shortcuts (Delete/Backspace)
@@ -255,20 +255,20 @@ const isValidConnection = useCallback((connection: Connection) => {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedNodes, selectedEdges, setNodes, setEdges])
 
-const nodeTypes = useMemo(() => ({
-  // ✅ CORRECT: Injecting callbacks as props
-  agent: (props: any) => (
-    <AgentNode 
-      {...props} 
-      updateNodeData={updateNodeData} 
-      onSpawnSettings={onSpawnSettings} 
-    />
-  ),
-  apiConfig: ApiConfigNode,
-  toolCircle: ToolCircleNode,
-  default: HorizontalNode,
-}), [updateNodeData, onSpawnSettings]);
- 
+  const nodeTypes = useMemo(() => ({
+    // ✅ CORRECT: Injecting callbacks as props
+    agent: (props: any) => (
+      <AgentNode
+        {...props}
+        updateNodeData={updateNodeData}
+        onSpawnSettings={onSpawnSettings}
+      />
+    ),
+    apiConfig: ApiConfigNode,
+    toolCircle: ToolCircleNode,
+    default: HorizontalNode,
+  }), [updateNodeData, onSpawnSettings]);
+
 
 
 
@@ -318,7 +318,7 @@ const nodeTypes = useMemo(() => ({
           onInit={(instance) => { reactFlowInstanceRef.current = instance }}
           nodeTypes={nodeTypes}
           onSelectionChange={onSelectionChange}
-          isValidConnection={isValidConnection} 
+          isValidConnection={isValidConnection}
           defaultViewport={defaultViewport}
         >
           <MiniMap />

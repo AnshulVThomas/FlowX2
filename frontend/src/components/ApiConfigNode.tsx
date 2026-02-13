@@ -1,6 +1,6 @@
 import { Handle, Position } from 'reactflow';
 
-export function ApiConfigNode({ data }: any) {
+export function ApiConfigNode({ }: any) {
   return (
     <div style={{ background: '#1e293b', padding: 12, borderRadius: 8, border: '1px solid #94a3b8', color: '#fff', width: 180 }}>
       <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>API CONFIGURATION</div>
