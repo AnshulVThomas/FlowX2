@@ -10,6 +10,7 @@ export interface PluginManifest {
     category: string;
     color: string;
     description: string;
+    singleton?: boolean;
     backend_class: string;
     frontend_component: string;
 }
@@ -17,6 +18,7 @@ export interface PluginManifest {
 export const loadPlugins = () => {
     const nodeTypes: Record<string, ComponentType<any>> = {};
     const toolsMenu: PluginManifest[] = [];
+    const singletonTypes = new Set<string>();
 
     console.log("🔌 Loading plugins...", Object.keys(manifestModules));
 
@@ -47,6 +49,12 @@ export const loadPlugins = () => {
 
                 // 2. Register for the UI Sidebar
                 toolsMenu.push(manifest);
+
+                // 3. Track singleton types
+                if (manifest.singleton) {
+                    singletonTypes.add(manifest.id);
+                }
+
                 console.log(`✅ Plugin Loaded: ${manifest.name} (${manifest.id})`);
             } else {
                 console.warn(`⚠️ Frontend component missing for plugin: ${pluginFolderName} at ${frontendPath}`);
@@ -56,5 +64,5 @@ export const loadPlugins = () => {
         }
     }
 
-    return { nodeTypes, toolsMenu };
+    return { nodeTypes, toolsMenu, singletonTypes };
 };

@@ -12,6 +12,10 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import type { Workflow, WorkflowSummary } from '../types';
 import { fetchWorkflowDetails, deleteWorkflow as apiDeleteWorkflow, saveWorkflow as apiSaveWorkflow, validateWorkflow, executeWorkflow, cancelWorkflow } from '../services/api';
+import { loadPlugins } from '../registry/pluginLoader';
+
+// Plugin-driven singleton types (only nodes whose manifest has "singleton": true)
+const { singletonTypes } = loadPlugins();
 
 interface WorkflowState {
     // Global Lists
@@ -215,7 +219,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
     addNode: (node) => {
         const { nodes } = get();
-        if (node.type === 'startNode' && nodes.some(n => n.type === 'startNode')) return;
+        if (node.type && singletonTypes.has(node.type) && nodes.some(n => n.type === node.type)) return;
         set((state) => ({
             nodes: [...state.nodes, node],
             isDirty: true

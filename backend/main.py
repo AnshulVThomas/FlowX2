@@ -7,6 +7,9 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent)) 
 # Add parent directory to sys.path to find 'plugins'
+from dotenv import load_dotenv
+# Load root .env
+load_dotenv(Path(__file__).parent.parent / ".env")
 from contextlib import asynccontextmanager
 from typing import List, Dict
 

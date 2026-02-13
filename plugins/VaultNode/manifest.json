@@ -4,6 +4,7 @@
     "category": "Configuration",
     "description": "Stores global secrets like sudo passwords for the workflow.",
     "color": "#eab308",
+    "singleton": true,
     "backend_class": "VaultNode",
     "frontend_component": "VaultNodeUI"
 }

@@ -4,6 +4,7 @@
     "category": "Core",
     "description": "Entry point that initiates workflow execution.",
     "color": "#3B82F6",
+    "singleton": true,
     "backend_class": "StartNode",
     "frontend_component": "StartNode"
 }
