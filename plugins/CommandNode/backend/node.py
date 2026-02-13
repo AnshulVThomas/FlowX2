@@ -56,7 +56,23 @@ class CommandNode(FlowXNode):
         
         # Check Sudo Lock Status
         use_sudo_lock = self.data.get("sudoLock", False)
+        
+        # [NODE DEBUG] Trace Variables
+        print(f"[NODE DEBUG] ID={node_id} SudoLock={use_sudo_lock}")
+        print(f"[NODE DEBUG] Context Password Present: {'YES' if sudo_password else 'NO'}")
+        
         password_to_inject = sudo_password if use_sudo_lock else None
+        
+        # FAIL FAST: If locked but no password, prevent hang
+        if use_sudo_lock and not password_to_inject:
+             err_msg = "[FlowX Error] Node is Sudo Locked but no password provided in context. Run workflow with sudo credentials."
+             if emit:
+                 await emit("node_log", {
+                    "nodeId": node_id, 
+                    "log": f"\r\n\x1b[31m{err_msg}\x1b[0m\r\n", 
+                    "type": "stderr"
+                 })
+             return {"status": "error", "stdout": err_msg, "exit_code": 1}
 
         # Thread-safe logging callback
         async def stream_logger(chunk: str, stream_type: str):

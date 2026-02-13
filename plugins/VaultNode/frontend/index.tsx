@@ -21,7 +21,7 @@ export default function VaultNodeUI({ id, data }: any) {
                     type="password"
                     value={data.sudoPassword || ''}
                     onChange={handlePasswordChange}
-                    placeholder="••••••••"
+                    placeholder="password..."
                     className="bg-black/40 border border-gray-700 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-yellow-500 transition-colors nodrag"
                 />
             </div>

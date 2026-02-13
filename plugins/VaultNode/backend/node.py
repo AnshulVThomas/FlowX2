@@ -1,5 +1,5 @@
 from typing import Dict, Any
-from engine.protocol import FlowXNode
+from engine.protocol import FlowXNode, ValidationResult
 
 class VaultNode(FlowXNode):
     """
@@ -10,4 +10,16 @@ class VaultNode(FlowXNode):
         return {
             "status": "success",
             "message": "Vault configuration loaded."
+        }
+
+    def validate(self, data: Dict[str, Any]) -> ValidationResult:
+        return {
+            "valid": True, 
+            "errors": []
+        }
+
+    def get_execution_mode(self) -> Dict[str, bool]:
+        return {
+            "requires_pty": False, 
+            "is_interactive": False 
         }

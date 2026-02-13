@@ -1,10 +1,11 @@
-from typing import Dict, Type
+from typing import Dict, Type, List
 from .protocol import FlowXNode
 import sys
 import importlib
 import json
 from pathlib import Path
 import logging
+from fastapi import APIRouter
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,7 @@ PLUGINS_DIR = PROJECT_ROOT / "plugins"
 class NodeRegistry:
     _instance = None
     _nodes: Dict[str, Type[FlowXNode]] = {}
+    _routers: List[APIRouter] = []
 
     def __new__(cls):
         if cls._instance is None:
@@ -62,6 +64,18 @@ class NodeRegistry:
                 cls._nodes[node_id] = node_class
                 
                 logger.info(f"✅ Backend Plugin Loaded: {manifest.get('name')} ({node_id})")
+                
+                # 4. Load Router (Optional)
+                try:
+                    router_module_path = f"plugins.{plugin_path.name}.backend.router"
+                    router_module = importlib.import_module(router_module_path)
+                    if hasattr(router_module, "router"):
+                        cls._routers.append(router_module.router)
+                        logger.info(f"   └── API Router Loaded")
+                except ImportError:
+                    pass # Router is optional
+                except Exception as e:
+                    logger.warn(f"   ⚠️ Failed to load router for {plugin_path.name}: {e}")
 
             except Exception as e:
                 logger.error(f"❌ Failed to load plugin {plugin_path.name}: {e}")
@@ -87,6 +101,10 @@ class NodeRegistry:
     @classmethod
     def list_nodes(cls):
         return list(cls._nodes.keys())
+        
+    @classmethod
+    def get_routers(cls) -> List[APIRouter]:
+        return cls._routers
 
 # Initialize on import
 NodeRegistry.load_plugins()
