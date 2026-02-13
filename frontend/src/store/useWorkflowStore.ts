@@ -486,13 +486,29 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
         try {
             await cancelWorkflow(activeThreadId);
-            // We expect the backend to eventually return/cancel the executeGraph call,
-            // or we receive a socket event. 
-            // For immediate UI feedback, we can set status to 'cancelled' if we tracked it globally.
-            // But let's rely on the socket 'node_status' event for now.
         } catch (error) {
             console.error("Failed to abort workflow", error);
         }
+
+        // Immediately reset all running/attention nodes to idle
+        set(state => ({
+            activeThreadId: undefined,
+            nodes: state.nodes.map(n => {
+                const s = n.data.execution_status || n.data.status;
+                if (s === 'running' || s === 'attention_required') {
+                    return {
+                        ...n,
+                        data: {
+                            ...n.data,
+                            status: 'idle',
+                            execution_status: undefined,
+                            thread_id: undefined,
+                        }
+                    };
+                }
+                return n;
+            })
+        }));
     },
 
     markClean: (id) => {
