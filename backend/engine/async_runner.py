@@ -7,14 +7,23 @@ from .registry import NodeRegistry
 # Sentinel object for skipping branches
 SKIP_BRANCH = object()
 
+# Edge handles that are configuration-only (not execution flow)
+CONFIG_HANDLES = {'api-handle', 'tool-handle'}
+# Node types that are configuration-only and should not be executed
+CONFIG_NODE_TYPES = {'apiConfig', 'toolCircle'}
+
 class AsyncGraphExecutor:
     def __init__(self, workflow_data: dict, emit_event=None, thread_id: str = None, global_context: dict = None, initial_state: dict = None):
         self.workflow_id = workflow_data.get("id")
-        self.nodes = workflow_data.get("nodes", [])
-        self.edges = workflow_data.get("edges", [])
+        all_nodes = workflow_data.get("nodes", [])
+        all_edges = workflow_data.get("edges", [])
         self.emit_event = emit_event
         self.thread_id = thread_id
         self.global_context = global_context or {}
+        
+        # Filter out config-only edges and nodes
+        self.edges = [e for e in all_edges if e.get("sourceHandle") not in CONFIG_HANDLES]
+        self.nodes = [n for n in all_nodes if n.get("type") not in CONFIG_NODE_TYPES]
         
         # Global Results / Errors
         self.results = initial_state or {} 
@@ -92,48 +101,49 @@ class AsyncGraphExecutor:
             inputs = {}
             
             if parent_ids:
-                # print(f"[{node_id}] Waiting for parents: {parent_ids}")
-                # Wait for all parents to complete or fail
-                await asyncio.gather(*[self.futures[p_id] for p_id in parent_ids])
-            
-                # 2. CHECK PARENT RESULTS & BRANCHING
+                # Wait for all parents to resolve (success, fail, or skip)
+                await asyncio.gather(*[self.futures[p] for p in parent_ids], return_exceptions=True)
+                
                 should_skip = False
-                parent_failures = []
                 
                 for p_id in parent_ids:
-                    try:
-                        res = self.futures[p_id].result()
-                        inputs[p_id] = res
-                        
-                        if res is SKIP_BRANCH:
-                            should_skip = True
-                        elif isinstance(res, Exception):
-                            parent_failures.append(res)
-                            
-                    except asyncio.CancelledError:
+                    # Find the edge connecting Parent -> Me
+                    edge = next((e for e in self.edges if e["source"] == p_id and e["target"] == node_id), None)
+                    behavior = edge.get("data", {}).get("behavior", "conditional") if edge else "conditional"
+                    
+                    # Get Parent's Result/Status safely
+                    res = self.futures[p_id].result() if not self.futures[p_id].exception() else self.futures[p_id].exception()
+                    inputs[p_id] = res
+                    
+                    # If parent was skipped, this branch is dead. Propagate skip.
+                    if res is SKIP_BRANCH:
                         should_skip = True
-                    except Exception as e:
-                        parent_failures.append(e)
+                        break
+                    
+                    # Extract status exactly as builder.py did
+                    p_status = res.get("status") if isinstance(res, dict) else "failed"
 
-                # BRANCHING LOGIC: Check edge behavior
-                # If any incoming edge is 'conditional' and parent failed -> SKIP
-                # If edge is 'force' -> Run anyway (unless parent was SKIP_BRANCH)
-                
-                # Simplified Logic for now: 
-                # If any parent returns SKIP_BRANCH -> propagate SKIP_BRANCH
+                    # ---------------------------------------------------------
+                    # REPLICATING builder.py 'smart_router' LOGIC
+                    # ---------------------------------------------------------
+                    if p_status == "success":
+                        # Success -> Run Conditional + Force (Skip Failure)
+                        if behavior == "failure":
+                            should_skip = True
+                            break
+                    else:
+                        # Failed -> Run Force + Failure (Skip Conditional)
+                        if behavior == "conditional":
+                            should_skip = True
+                            break
+
+                # Apply the Skip
                 if should_skip:
                     self.futures[node_id].set_result(SKIP_BRANCH)
-                    return
-
-                # If any parent failed, check if we have a 'force' edge from it
-                if parent_failures:
-                    # Logic: If ALL parents failed, and we don't have a specific 'failure' handler or 'force', skip.
-                    # For this implementation, we'll assume strict dependency unless specified.
-                    # If this node is NOT valid relationships -> Skip
-                    # Simple rule: If any parent failed, we propagate failure/skip unless we are an Error Handler.
                     
-                    # For now: Propagate exception if ANY parent failed
-                    self.futures[node_id].set_result(parent_failures[0])
+                    # Emit "skipped" so the UI visually greys it out
+                    if self.emit_event:
+                        await self.emit_event("node_status", {"nodeId": node_id, "status": "skipped"})
                     return
 
             # 3. SETUP & EXECUTE

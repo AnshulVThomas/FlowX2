@@ -4,12 +4,11 @@ from fastapi import HTTPException
 
 # Registry & Protocol
 from .registry import NodeRegistry
-from nodes.start.node import StartNode
-from nodes.command.node import CommandNode
 
-# Register Nodes
-NodeRegistry.register("startNode", StartNode)
-NodeRegistry.register("commandNode", CommandNode)
+# All node registrations are now handled dynamically by NodeRegistry.load_plugins()
+
+# Config-only edge handles to exclude from execution graph
+CONFIG_HANDLES = {'api-handle', 'tool-handle'}
 
 def validate_graph(nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]]) -> Dict[str, str]:
     """
@@ -36,6 +35,9 @@ def validate_graph(nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]]) -> 
     # Build Adjacency List
     adj_list: Dict[str, List[str]] = {n['id']: [] for n in nodes}
     for edge in edges:
+        # Skip config-only edges (api-handle, tool-handle)
+        if edge.get('sourceHandle') in CONFIG_HANDLES:
+            continue
         src = edge.get('source')
         trg = edge.get('target')
         if src in adj_list and trg in adj_list:

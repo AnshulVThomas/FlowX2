@@ -1,0 +1,9 @@
+{
+    "id": "commandNode",
+    "name": "Bash Command",
+    "category": "System",
+    "description": "Executes shell commands.",
+    "color": "#3b82f6",
+    "backend_class": "CommandNode",
+    "frontend_component": "CommandNodeUI"
+}

@@ -12,15 +12,16 @@ import {
 // because we are selecting the root state directly!
 import { useWorkflowStore } from '../../store/useWorkflowStore';
 import { v4 as uuidv4 } from 'uuid';
-import { StartNode } from '../../nodes/StartNode';
-import { CommandNode } from '../../nodes/CommandNode';
+import { loadPlugins } from '../../registry/pluginLoader';
 import { fetchSystemInfo } from '../../services/api';
 
 import '@xyflow/react/dist/style.css';
 
+// LOAD PLUGINS (Static at build time via import.meta.glob)
+const { nodeTypes: pluginNodeTypes, toolsMenu: pluginTools } = loadPlugins();
+
 const nodeTypes = {
-    startNode: StartNode,
-    commandNode: CommandNode,
+    ...pluginNodeTypes,
 };
 
 export function Canvas() {

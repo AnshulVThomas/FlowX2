@@ -1,6 +1,6 @@
 import { useWorkflowStore } from "../../store/useWorkflowStore";
 import { Activity, X, Server, Terminal } from "lucide-react";
-import type { CommandNodeData } from "../../nodes/CommandNode";
+import type { CommandNodeData } from "../../../../plugins/CommandNode/frontend/types";
 import { ValidationShield } from "../ValidationShield";
 
 // --- INNER COMPONENT (Only renders when Open) ---

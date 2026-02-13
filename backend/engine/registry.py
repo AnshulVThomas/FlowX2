@@ -1,5 +1,17 @@
 from typing import Dict, Type
 from .protocol import FlowXNode
+import sys
+import importlib
+import json
+from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Resolve paths
+BACKEND_DIR = Path(__file__).parent.parent
+PROJECT_ROOT = BACKEND_DIR.parent
+PLUGINS_DIR = PROJECT_ROOT / "plugins"
 
 class NodeRegistry:
     _instance = None
@@ -11,11 +23,55 @@ class NodeRegistry:
         return cls._instance
 
     @classmethod
+    def load_plugins(cls):
+        if not PLUGINS_DIR.exists():
+            logger.error(f"Plugins directory not found at {PLUGINS_DIR}")
+            return
+
+        # Ensure Python can import from the root "plugins" module
+        if str(PROJECT_ROOT) not in sys.path:
+            sys.path.insert(0, str(PROJECT_ROOT))
+
+        logger.info(f"🔌 Scanning plugins at {PLUGINS_DIR}")
+        for plugin_path in PLUGINS_DIR.iterdir():
+            if not plugin_path.is_dir() or plugin_path.name.startswith("__"):
+                continue
+                
+            manifest_path = plugin_path / "manifest.json"
+            if not manifest_path.exists():
+                continue
+
+            try:
+                # 1. Parse Manifest
+                with open(manifest_path, 'r') as f:
+                    manifest = json.load(f)
+                
+                node_id = manifest.get("id")
+                backend_class_name = manifest.get("backend_class")
+
+                if not node_id or not backend_class_name:
+                    logger.warn(f"⚠️ Invalid manifest in {plugin_path.name}: Missing id or backend_class")
+                    continue
+
+                # 2. Import Module (e.g., plugins.CommandNode.backend.node)
+                module_path = f"plugins.{plugin_path.name}.backend.node"
+                module = importlib.import_module(module_path)
+                
+                # 3. Get Class & Register
+                node_class = getattr(module, backend_class_name)
+                cls._nodes[node_id] = node_class
+                
+                logger.info(f"✅ Backend Plugin Loaded: {manifest.get('name')} ({node_id})")
+
+            except Exception as e:
+                logger.error(f"❌ Failed to load plugin {plugin_path.name}: {e}")
+
+    @classmethod
     def register(cls, node_type: str, node_class: Type[FlowXNode]):
         """
         Register a new node type strategy.
         """
-        print(f"DEBUG: Registering node type '{node_type}' with class {node_class.__name__}")
+        # print(f"DEBUG: Registering node type '{node_type}' with class {node_class.__name__}")
         cls._nodes[node_type] = node_class
 
     @classmethod
@@ -25,12 +81,12 @@ class NodeRegistry:
         """
         node_class = cls._nodes.get(node_type)
         if not node_class:
-            # Fallback or strict error? 
-            # For now, let's treat unknown nodes as a generic error or handle explicitly.
-            # But the caller expects a class.
             raise ValueError(f"Unknown node type: {node_type}")
         return node_class
 
     @classmethod
     def list_nodes(cls):
         return list(cls._nodes.keys())
+
+# Initialize on import
+NodeRegistry.load_plugins()

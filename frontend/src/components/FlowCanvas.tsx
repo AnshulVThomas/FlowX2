@@ -23,6 +23,7 @@ import { AgentNode } from './AgentNode'
 import { ApiConfigNode } from './ApiConfigNode'
 import { ToolCircleNode } from './ToolCircleNode'
 import { exportFlowState } from '../StateManagement/exportState'
+import { loadPlugins } from '../registry/pluginLoader';
 
 import 'reactflow/dist/style.css'
 
@@ -35,11 +36,20 @@ type DragNodeType =
   | 'webhook'
   | 'database'
   | 'apiConfig'
-  | 'toolCircle';
+  | 'toolCircle'
+  | string;
 type PaletteItem = {
   label: string
   type: DragNodeType
 }
+
+// LOAD PLUGINS (Static at build time)
+const { nodeTypes: pluginNodeTypes, toolsMenu: pluginTools } = loadPlugins();
+
+const PLUGIN_PALETTE_GROUP = {
+  group: 'Plugins',
+  items: pluginTools.map(p => ({ label: p.name, type: p.id as DragNodeType }))
+};
 
 const PALETTE: Array<{ group: string; items: PaletteItem[] }> = [
   {
@@ -64,6 +74,7 @@ const PALETTE: Array<{ group: string; items: PaletteItem[] }> = [
       { label: 'Tool Node', type: 'toolCircle' },
     ],
   },
+  ...(pluginTools.length > 0 ? [PLUGIN_PALETTE_GROUP] : []),
 ]
 
 // ID generation should ideally be based on existing nodes length to avoid collisions on refresh
@@ -267,8 +278,8 @@ export default function FlowCanvas() {
     apiConfig: ApiConfigNode,
     toolCircle: ToolCircleNode,
     default: HorizontalNode,
+    ...pluginNodeTypes,
   }), [updateNodeData, onSpawnSettings]);
-
 
 
 

@@ -370,6 +370,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
             ...node,
             data: {
                 ...node.data,
+                status: 'idle',              // Reset StartNode visual state
                 execution_status: undefined, // Removes Green/Red Border
                 thread_id: undefined,        // Unlinks old thread
                 logs: [],                    // Clears internal log buffer
@@ -532,7 +533,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
                             if (n.id === nodeId) {
                                 let newData: any = {
                                     ...n.data,
-                                    execution_status: status,
+                                    status: status,              // Sync for StartNode (reads data.status)
+                                    execution_status: status,    // Sync for CommandNode (reads data.execution_status)
                                     thread_id: thread_id || n.data.thread_id // Sync node thread
                                 };
 

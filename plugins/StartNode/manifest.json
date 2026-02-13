@@ -1,0 +1,9 @@
+{
+    "id": "startNode",
+    "name": "Start Node",
+    "category": "Core",
+    "description": "Entry point that initiates workflow execution.",
+    "color": "#3B82F6",
+    "backend_class": "StartNode",
+    "frontend_component": "StartNode"
+}

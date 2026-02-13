@@ -15,7 +15,11 @@ class GraphBuilder:
         graph = StateGraph(FlowState)
         
         nodes = workflow_data.get("nodes", [])
-        edges = workflow_data.get("edges", [])
+        all_edges = workflow_data.get("edges", [])
+        
+        # Filter out config-only edges (api-handle, tool-handle are not execution flow)
+        CONFIG_HANDLES = {'api-handle', 'tool-handle'}
+        edges = [e for e in all_edges if e.get("sourceHandle") not in CONFIG_HANDLES]
         
         # 1. Add Nodes
         for node in nodes:
