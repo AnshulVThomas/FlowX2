@@ -1,7 +1,7 @@
 # FlowX2 Project Documentation
 
 **Date:** February 2, 2026
-**Version:** 2.0 (Dual-Terminal & LangGraph Integration)
+**Version:** 3.0 (Async Engine & Sudo Lock)
 **Author:** Antigravity (Google DeepMind)
 
 ---
@@ -30,8 +30,8 @@ The frontend is built for high-performance visual interaction using **ReactFlow*
     *   **Border Animations**: Nodes use specific border colors/pulses to indicate state (Generating, Running, Validation Error, Execution Error).
     *   **Validation Shield**: A dedicated icon on every node that reflects the backend's pre-flight validation status.
 
-### 2.2 Backend Architecture (FastAPI + LangGraph)
-The backend is a strictly typed, event-driven engine.
+### 2.2 Backend Architecture (FastAPI + AsyncGraphExecutor)
+The backend is a strictly typed, event-driven engine optimized for speed and security.
 
 *   **Modular Node Architecture**:
     *   Located in `backend/nodes/`.
@@ -39,12 +39,14 @@ The backend is a strictly typed, event-driven engine.
         *   `node.py`: The execution logic implementing `FlowXNode` protocol.
         *   `schema.py`: Pydantic models.
         *   `service.py`: Auxiliary services (e.g., AI Generation).
-*   **LangGraph Integration**:
-    *   The workflow graph is compiled into a generic state machine.
-    *   **Checkpointing**: All states are persisted to MongoDB, allowing workflows to be paused (e.g., for Sudo password) and Resumed exactly where they left off.
-*   **Safety Engine**:
-    *   **Fail-Fast Sudo**: Commands requiring root triggers an immediate interrupt if no password is cached.
-    *   **Secure Injection**: Passwords are injected via `stdin` (`echo 'pass' | sudo -S`) to prevent leakages in process lists or logs.
+*   **Async Execution Engine (v3.0)**:
+    *   Replaced LangGraph with a custom **AsyncGraphExecutor**.
+    *   **Parallelism**: Uses `asyncio.Future` for non-blocking, parallel node execution.
+    *   **Crash Recovery**: Resumes execution from the last successful state stored in MongoDB `runs` collection.
+*   **Security Engine (Sudo Lock)**:
+    *   **Pre-Flight Authorization**: Sudo passwords are collected securely via a frontend modal *before* execution starts.
+    *   **SudoKeepAlive**: A background context manager refreshes the sudo timestamp, allowing `sudo -n` commands to run instantly without interactive prompts.
+    *   **Secure Injection**: Passwords are never stored permanently, only held in memory during the execution lifecycle.
 
 ---
 

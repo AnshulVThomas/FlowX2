@@ -369,6 +369,7 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                                     nodeId={id}
                                     shouldConnect={shouldConnectInteractive}
                                     onCommandComplete={onInteractiveComplete} // PASS MEMOIZED CALLBACK
+                                    sudo={data.sudoLock}
                                 />
                             </div>
                         </div>

@@ -119,6 +119,7 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
     }, [isValidating, abortWorkflow, runExecution]);
 
     const handleSudoConfirm = useCallback(async (password: string) => {
+        setShowSudoModal(false); // Fix: Close modal immediately
         // Proceed with execution using injected password
         await runExecution(password);
     }, [runExecution]);

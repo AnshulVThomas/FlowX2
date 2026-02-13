@@ -67,8 +67,7 @@ export const Header = memo(({
         handleGenerate();
     };
 
-    // Helper: Determine if we should recommend locking based on risk
-    const isRisk = uiRender?.badge_color === 'red' || uiRender?.badge_color === 'yellow';
+    // deleted isRisk
 
     return (
         <div className="bg-white px-3 py-2.5 border-b border-gray-100 flex items-center gap-2 flex-shrink-0">
@@ -107,21 +106,30 @@ export const Header = memo(({
 
             <div className="h-4 w-[1px] bg-gray-200 mx-1" />
 
-            <div className="flex items-center gap-1">
-                {/* Lock Toggle */}
+            {/* Lock Slider */}
+            <div className="flex items-center gap-2 mr-2">
                 <button
                     onClick={() => updateNodeData(id, { sudoLock: !sudoLock })}
-                    className={`p-1.5 rounded transition-all ${sudoLock
-                            ? 'bg-yellow-500/10 text-yellow-600 hover:bg-yellow-500/20'
-                            : isRisk
-                                ? 'text-gray-300 hover:text-yellow-500 hover:bg-yellow-50'
-                                : 'text-gray-300 hover:text-gray-500 hover:bg-stone-50'
-                        }`}
-                    title={sudoLock ? "Requires Sudo (Locked)" : "Run as normal user"}
+                    className={`
+                        relative w-8 h-4 rounded-full transition-colors duration-200 ease-in-out focus:outline-none
+                        ${sudoLock ? 'bg-amber-500' : 'bg-stone-200'}
+                    `}
+                    title={sudoLock ? "Sudo Required (Locked)" : "Run as normal user"}
                 >
-                    {sudoLock ? <Lock size={14} /> : <Unlock size={14} />}
+                    <span
+                        className={`
+                            absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transform transition-transform duration-200 ease-in-out flex items-center justify-center
+                            ${sudoLock ? 'translate-x-4' : 'translate-x-0'}
+                        `}
+                    >
+                        {sudoLock ? <Lock size={8} className="text-amber-500" /> : <Unlock size={8} className="text-stone-400" />}
+                    </span>
                 </button>
+            </div>
 
+            <div className="h-4 w-[1px] bg-gray-200 mx-1" />
+
+            <div className="flex items-center gap-1">
                 <button
                     onClick={() => setIsTerminalOpen(!isTerminalOpen)}
                     className={`p-1.5 rounded transition-all ${isTerminalOpen ? 'bg-stone-100 text-stone-800' : 'text-gray-400 hover:text-gray-600 hover:bg-stone-50'}`}

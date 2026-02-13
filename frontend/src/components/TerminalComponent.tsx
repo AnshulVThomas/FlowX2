@@ -19,6 +19,7 @@ interface TerminalComponentProps {
     shouldConnect?: boolean;
     initialLogs?: string[];
     runId?: string;
+    sudo?: boolean;
 }
 
 const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
@@ -29,7 +30,8 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
     nodeId,
     shouldConnect,
     initialLogs,
-    runId
+    runId,
+    sudo = false
 }, ref) => {
     const terminalRef = useRef<HTMLDivElement>(null);
     const wsRef = useRef<WebSocket | null>(null);
@@ -131,7 +133,7 @@ const TerminalComponent = forwardRef<TerminalRef, TerminalComponentProps>(({
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const host = window.location.hostname;
                 const port = '8000';
-                const wsUrl = `${protocol}//${host}:${port}/ws/terminal`;
+                const wsUrl = `${protocol}//${host}:${port}/ws/terminal?sudo=${sudo ? 'true' : 'false'}`;
 
                 ws = new WebSocket(wsUrl);
                 wsRef.current = ws;
