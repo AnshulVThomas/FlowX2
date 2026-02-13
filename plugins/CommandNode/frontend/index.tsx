@@ -422,6 +422,7 @@ function propsAreEqual(prev: NodeProps<CommandNodeData>, next: NodeProps<Command
         prev.data.command === next.data.command &&
         prev.data.prompt === next.data.prompt &&
         prev.data.locked === next.data.locked &&
+        prev.data.sudoLock === next.data.sudoLock &&
         prev.data.ui_render?.badge_color === next.data.ui_render?.badge_color &&
         prev.data.ui_render?.code_block === next.data.ui_render?.code_block &&
         prev.data.execution_status === next.data.execution_status &&
