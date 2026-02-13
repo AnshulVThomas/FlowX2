@@ -440,6 +440,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
                         data: {
                             ...node.data,
                             thread_id: threadId,
+                            status: newStatus,               // Sync for StartNode
                             execution_status: newStatus,
                             // Optionally store exit code if needed
                         }
@@ -598,7 +599,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
                     set(state => ({
                         nodes: state.nodes.map(n =>
                             n.id === nodeId
-                                ? { ...n, data: { ...n.data, execution_status: 'attention_required', thread_id: thread_id } }
+                                ? { ...n, data: { ...n.data, status: 'attention_required', execution_status: 'attention_required', thread_id: thread_id } }
                                 : n
                         )
                     }));
