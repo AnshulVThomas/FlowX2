@@ -107,13 +107,15 @@ async def websocket_endpoint(websocket: WebSocket):
         pass
 
 @app.websocket("/ws/terminal")
-async def websocket_terminal_endpoint(websocket: WebSocket):
+async def websocket_terminal_endpoint(websocket: WebSocket, sudo: bool = False):
     await websocket.accept()
     # print("WebSocket Terminal Connected")
     
     # Create PTY Session (defaults to bash)
-    # TODO: In future, might accept a command via query param or initial message
-    session = PtySession(command="bash")
+    # If sudo is requested, run 'sudo -i' to drop into root shell (interactive password prompt)
+    cmd = "sudo -i" if sudo else "bash"
+    
+    session = PtySession(command=cmd)
     session.start()
     
     loop = asyncio.get_event_loop()
