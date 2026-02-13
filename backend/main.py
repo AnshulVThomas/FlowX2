@@ -8,6 +8,7 @@ from typing import List, Dict
 from nodes.command.schema import GenerateCommandRequest, UIResponse, UIRender, ExecutionMetadata
 from app.core.session_manager import PtySession
 from engine.builder import GraphBuilder
+from engine.validator import validate_workflow
 from langgraph.checkpoint.mongodb import MongoDBSaver
 from pymongo import MongoClient
 import asyncio
@@ -308,8 +309,14 @@ async def execute_workflow(workflow_data: dict, background_tasks: BackgroundTask
     print(f"🚀 Executing Workflow: {workflow_data.get('id', 'Unknown ID')}")
     print("="*50)
     
-    nodes = {n['id']: n.get('data', {}).get('name', n['id']) for n in workflow_data.get('nodes', [])}
-    edges = workflow_data.get('edges', [])
+    nodes_dict = workflow_data.get('nodes', [])
+    edges_list = workflow_data.get('edges', [])
+    
+    # Tier 3 Validation: Prevent execution of invalid graphs
+    validate_workflow(nodes_dict, edges_list)
+
+    nodes = {n['id']: n.get('data', {}).get('name', n['id']) for n in nodes_dict}
+    edges = edges_list
     
     print("Structure:")
     if not edges:

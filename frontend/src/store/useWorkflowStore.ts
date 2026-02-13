@@ -433,9 +433,32 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
                 })
             }));
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Execution Failed", error);
-            // Optionally set global error state
+
+            // Handle Validation Errors form Backend (Tier 3)
+            // Backend returns { detail: [{ nodeId, message, level }] }
+            if (error.detail && Array.isArray(error.detail)) {
+                console.log("Parsing Validation Errors from Execution Attempt...");
+
+                const errorMap = error.detail.reduce((acc: Record<string, string[]>, err: any) => {
+                    if (err.nodeId && err.nodeId !== 'global') {
+                        if (!acc[err.nodeId]) acc[err.nodeId] = [];
+                        acc[err.nodeId].push(err.message);
+                    }
+                    return acc;
+                }, {} as Record<string, string[]>);
+
+                const statusMap = Object.keys(errorMap).reduce((acc, id) => {
+                    acc[id] = 'VALIDATION_FAILED';
+                    return acc;
+                }, {} as Record<string, string>);
+
+                set({
+                    validationErrors: errorMap,
+                    validationStatus: statusMap
+                });
+            }
         }
     },
 

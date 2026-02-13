@@ -178,7 +178,8 @@ export const executeWorkflow = async (workflow: any): Promise<ExecutionResponse>
 
         if (!response.ok) {
             const err = await response.json();
-            throw new Error(err.detail || err.error || 'Execution failed');
+            // Throw the full error object so the store can parse 'detail'
+            throw err;
         }
         return await response.json();
     } catch (error) {
