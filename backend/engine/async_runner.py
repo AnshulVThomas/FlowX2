@@ -8,15 +8,16 @@ from .registry import NodeRegistry
 SKIP_BRANCH = object()
 
 class AsyncGraphExecutor:
-    def __init__(self, workflow_data: dict, emit_event=None, thread_id: str = None):
+    def __init__(self, workflow_data: dict, emit_event=None, thread_id: str = None, global_context: dict = None, initial_state: dict = None):
         self.workflow_id = workflow_data.get("id")
         self.nodes = workflow_data.get("nodes", [])
         self.edges = workflow_data.get("edges", [])
         self.emit_event = emit_event
         self.thread_id = thread_id
+        self.global_context = global_context or {}
         
         # Global Results / Errors
-        self.results = {} 
+        self.results = initial_state or {} 
         self.errors = []
         
         # Execution State
@@ -26,6 +27,19 @@ class AsyncGraphExecutor:
         # Initialize futures for all nodes
         for node in self.nodes:
             self.futures[node["id"]] = asyncio.Future()
+            
+            # Crash Recovery: If node is already done, set result immediately
+            if node["id"] in self.results:
+                # We assume the result in DB is valid. 
+                # If it was a failure, we might want to retry? 
+                # Use Case: "Resume" usually means retry failed/pending. 
+                # But here we accept 'initial_state' as "completed nodes".
+                # If a node is in initial_state, we treat it as skipped/completed.
+                val = self.results[node["id"]]
+                # CAUTION: If val is a dict with 'status': 'failed', do we re-run?
+                # For now, simplistic recovery: If it's in results, IT IS DONE.
+                # The caller (resume endpoint) should filter out failed nodes from initial_state if they want retry.
+                self.futures[node["id"]].set_result(val)
 
     def get_parents(self, node_id: str) -> List[str]:
         return [e["source"] for e in self.edges if e["target"] == node_id]
@@ -69,6 +83,10 @@ class AsyncGraphExecutor:
         node_data = node.get("data", {})
         
         try:
+            # 0. CHECK IF ALREADY DONE (Crash Recovery)
+            if self.futures[node_id].done():
+                return
+
             # 1. WAIT FOR PARENTS
             parent_ids = self.get_parents(node_id)
             inputs = {}
@@ -141,6 +159,8 @@ class AsyncGraphExecutor:
                 "emit_event": self.emit_event,
                 "system_fingerprint": {} 
             }
+            # Inject global context (e.g. sudo_password)
+            runtime_context.update(self.global_context)
             
             # The 'state' dictionary passed to the node
             context = {

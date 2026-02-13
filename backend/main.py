@@ -315,52 +315,17 @@ async def execute_workflow(workflow_data: dict, background_tasks: BackgroundTask
     # Tier 3 Validation: Prevent execution of invalid graphs
     validate_workflow(nodes_dict, edges_list)
 
-    nodes = {n['id']: n.get('data', {}).get('name', n['id']) for n in nodes_dict}
-    edges = edges_list
-    
-    print("Structure:")
-    if not edges:
-        print("  [Single Node Execution (or Disconnected)]")
-    
-    for edge in edges:
-        source_id = edge['source']
-        target_id = edge['target']
-        
-        # Get Names
-        source_name = nodes.get(source_id, source_id)
-        target_name = nodes.get(target_id, target_id)
-        
-        # Get Commands
-        source_cmd = ""
-        target_cmd = ""
-        
-        # Find node data for command
-        for n in workflow_data.get('nodes', []):
-            if n['id'] == source_id:
-                source_cmd = n.get('data', {}).get('command', '')
-            if n['id'] == target_id:
-                target_cmd = n.get('data', {}).get('command', '')
-
-        # Format with Command if available
-        # Truncate command for display
-        def fmt_node(name, cmd):
-            if cmd:
-                cmd_short = (cmd[:30] + '...') if len(cmd) > 30 else cmd
-                return f"{name} ({cmd_short})"
-            return name
-
-        source_display = fmt_node(source_name, source_cmd)
-        target_display = fmt_node(target_name, target_cmd)
-
-        behavior = edge.get('data', {}).get('behavior', 'conditional')
-        arrow = "-->" if behavior == "conditional" else ("==>" if behavior == "force" else "-!->")
-        print(f"  [{source_display}] {arrow} [{target_display}]")
-    print("="*50 + "\n")
-
     # --- ASYNC EXECUTOR REPLACEMENT ---
     from engine.async_runner import AsyncGraphExecutor
     import uuid
     thread_id = str(uuid.uuid4())
+    
+    # Extract Global Context (Secrets) from payload
+    # Frontend should send 'secrets' or top-level keys
+    sudo_password = workflow_data.get("sudo_password") or workflow_data.get("secrets", {}).get("sudo_password")
+    global_context = {
+        "sudo_password": sudo_password
+    }
     
     # Tier 4: Inject WebSocket Emitter
     async def emit_to_frontend(event: str, data: dict):
@@ -377,7 +342,8 @@ async def execute_workflow(workflow_data: dict, background_tasks: BackgroundTask
     executor = AsyncGraphExecutor(
         workflow_data, 
         emit_event=emit_to_frontend,
-        thread_id=thread_id
+        thread_id=thread_id,
+        global_context=global_context
     )
 
     # Wrapper to run execution and handle registration
@@ -428,75 +394,95 @@ async def cancel_workflow(thread_id: str):
 @app.post("/api/v1/workflow/resume/{thread_id}")
 async def resume_workflow(thread_id: str, payload: dict):
     """
-    1. Fetches the Workflow ID associated with this Thread (store this linkage in DB or payload).
-    2. Rebuilds the Graph.
-    3. Resumes execution with the password injection.
+    CRASH RECOVERY:
+    1. Fetches the previous Run State from DB (results of completed nodes).
+    2. Fetches the Workflow Definition.
+    3. Re-hydrates AsyncGraphExecutor with `initial_state`.
+    4. Resumes execution (skipping already completed nodes).
     """
-    # 1. GET WORKFLOW DATA
+    # 1. GET WORKFLOW ID & SECRETS
     workflow_id = payload.get("workflowId")
-    if not workflow_id:
-        raise HTTPException(status_code=400, detail="workflowId is required to rebuild the graph")
+    sudo_password = payload.get("sudo_password") or payload.get("secrets", {}).get("sudo_password")
     
-    # Fetch from existing DB connection
+    if not workflow_id:
+        raise HTTPException(status_code=400, detail="workflowId is required to resume")
+    
     database = db.get_db()
-    # Note: 'id' field in DB is the string UUID, '_id' is ObjectId. We use 'id'.
+    
+    # 2. FETCH WORKFLOW DEFINITION
     workflow_data = await database.workflows.find_one({"id": workflow_id})
     if not workflow_data:
         raise HTTPException(status_code=404, detail="Workflow definition not found")
-
-    # 2. REBUILD GRAPH
-    # We need the exact same graph structure to map the checkpoint correctly
-    builder = GraphBuilder(checkpointer=checkpointer)
-    # FIX: The DB document wraps nodes/edges in a 'data' field
-    graph_source = workflow_data.get("data", {})
-    graph = builder.build(graph_source)
+        
+    # 3. FETCH RUN STATE (For Crash Recovery)
+    # We look for the document in 'runs' collection with this thread_id
+    run_state = await database.runs.find_one({"thread_id": thread_id})
     
-    # 3. RESUME EXECUTION
-    # Tier 4: Inject WebSocket Emitter (Critical for Resume Streaming)
+    initial_results = {}
+    if run_state and "results" in run_state:
+        # Format in DB: { "results": { "nodeId": { "status": "...", "data": ... } } }
+        initial_results = run_state["results"]
+        # Filter out failed nodes? 
+        # If a node failed, we probably want to RETRY it, so we should NOT include it in initial_state (which marks it as Done).
+        # We only include "completed" nodes.
+        initial_results = {
+            k: v for k, v in initial_results.items() 
+            if v.get("status") == "completed" or v.get("status") == "success"
+        }
+    
+    # 4. RE-EXECUTE WITH STATE
+    from engine.async_runner import AsyncGraphExecutor
+    
+    # Re-inject Emitter
     async def emit_to_frontend(event: str, data: dict):
         import json
         try:
-            payload = json.dumps({"type": event, "data": data})
+            data_with_context = {**data, "thread_id": thread_id}
+            payload = json.dumps({"type": event, "data": data_with_context})
             await manager.broadcast(payload)
         except Exception as e:
-            await manager.broadcast(payload)
-        except Exception as e:
-            pass # print(f"Emit error: {e}")
+            print(f"Emit error: {e}")
 
-    config = {
-        "configurable": {
-            "thread_id": thread_id,
-            "emit_event": emit_to_frontend
-        }
+    global_context = {
+        "sudo_password": sudo_password
     }
     
-    # Check if thread exists/is paused
-    # graph.aget_state is async
-    current_state = await graph.aget_state(config)
-    if not current_state.next:
-         # If next is empty, it means no next step -> not paused or completed.
-         # But if it was interrupted, it should have a next step (the node it is currently on or next one).
-         # For 'interrupt', it pauses *before* or *after*. 
-         # If we used 'interrupt()' inside node, it's a bit different than interrupt_before.
-         # LangGraph's 'interrupt' raises NodeInterrupt, effectively pausing execution.
-         # The node technically "failed" or "stopped".
-         # We need to test if this check works for manual interrupts.
-         # For now, we trust standard LangGraph behavior for resumes.
-         pass
-         # raise HTTPException(status_code=400, detail="Workflow is not in a paused state")
-
-    # Inject the password into the state
-    resume_update = {"sudo_password": payload.get("sudo_password")}
+    executor = AsyncGraphExecutor(
+        workflow_data, 
+        emit_event=emit_to_frontend,
+        thread_id=thread_id,
+        global_context=global_context,
+        initial_state=initial_results
+    )
     
-    try:
-        # Pass the update. LangGraph merges this into state and continues.
-        # If the node was interrupted, passing Command(resume=...) might be needed depending on implementation.
-        # But 'update' usually works for StateGraph.
-        final_state = await graph.ainvoke(resume_update, config=config)
-        
-        return {
-            "status": final_state.get("execution_status", "COMPLETED"),
-            "logs": final_state.get("logs", [])
-        }
-    except Exception as e:
-        return {"status": "FAILED", "error": str(e)}
+    # We use the same run_execution logic, but we don't start it as a background task because
+    # resume is typically synchronous wait in this API design (aligning with execute_workflow).
+    # But we should register it in active_executions just in case.
+    
+    async def run_execution():
+        try:
+             # Notify Resume
+            await emit_to_frontend("node_status", {"nodeId": "system", "status": "resuming"})
+            
+            result_stats = await executor.execute()
+            
+            return {
+                "thread_id": thread_id, 
+                "status": result_stats.get("status", "COMPLETED"),
+                "logs": result_stats.get("errors", []),
+                "results": result_stats.get("results", {})
+            }
+        except asyncio.CancelledError:
+             await emit_to_frontend("node_status", {"nodeId": "system", "status": "cancelled"}) 
+             return {"status": "CANCELLED", "thread_id": thread_id}
+        except Exception as e:
+            print(f"Resume failed: {e}")
+            return {"status": "FAILED", "error": str(e), "thread_id": thread_id}
+        finally:
+            if thread_id in active_executions:
+                del active_executions[thread_id]
+
+    task = asyncio.create_task(run_execution())
+    active_executions[thread_id] = task
+    
+    return await task
