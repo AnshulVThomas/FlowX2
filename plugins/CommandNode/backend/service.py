@@ -1,10 +1,13 @@
 import os
 import json
+from pathlib import Path
 from dotenv import load_dotenv
 from groq import Groq
 from .schema import CommandNodeOutput
 
-load_dotenv()
+# Explicitly load backend/.env (this file lives in plugins/, not backend/)
+BACKEND_ENV = Path(__file__).resolve().parent.parent.parent.parent / "backend" / ".env"
+load_dotenv(BACKEND_ENV)
 
 # UPDATE .env with this model string
 # FLOWX_MODEL="meta-llama/llama-4-maverick-17b-128e-instruct"
