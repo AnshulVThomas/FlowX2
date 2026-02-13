@@ -13,3 +13,4 @@ pymongo
 google-genai
 websockets
 psutil
+pexpect

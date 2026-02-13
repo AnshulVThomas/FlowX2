@@ -1,17 +1,30 @@
 import { useWorkflowStore } from "../../store/useWorkflowStore";
-import { Play, Sparkles } from "lucide-react";
-import { memo } from "react";
+import { Play, Sparkles, Key, Puzzle } from "lucide-react";
+import { memo, useMemo } from "react";
+import { loadPlugins } from "../../registry/pluginLoader";
 
-// Optimization: Memoize the component
+// Icon mapping for known node types
+const iconMap: Record<string, React.ReactNode> = {
+    startNode: <Play size={20} />,
+    commandNode: <Sparkles size={20} />,
+    vaultNode: <Key size={20} />,
+};
+
+// Color mapping for known categories
+const colorMap: Record<string, { bg: string; text: string }> = {
+    Core: { bg: 'bg-blue-500/20', text: 'text-blue-400' },
+    Execution: { bg: 'bg-orange-500/20', text: 'text-orange-400' },
+    Configuration: { bg: 'bg-yellow-500/20', text: 'text-yellow-400' },
+};
+
+// Nodes that can only exist once on the canvas
+const SINGLETON_TYPES = new Set(['startNode']);
+
 export const Sidebar = memo(() => {
-    // ⚡️ OPTIMIZED: Check the live 'nodes' array directly.
-    // This removes the heavy .find() on the workflows array.
-    // Optimization: Zustand selector returns a primitive (boolean). 
-    // React will NOT re-render if the boolean value hasn't changed, 
-    // even if 'state.nodes' has changed reference.
-    const hasStartNode = useWorkflowStore((state) =>
-        state.nodes.some(node => node.type === 'startNode')
-    );
+    const nodes = useWorkflowStore((state) => state.nodes);
+
+    // Load plugin manifests (static at build time, so this is cheap)
+    const toolsMenu = useMemo(() => loadPlugins().toolsMenu, []);
 
     const onDragStart = (event: React.DragEvent, nodeType: string, label: string) => {
         event.dataTransfer.setData('application/reactflow/type', nodeType);
@@ -23,39 +36,37 @@ export const Sidebar = memo(() => {
         <aside className="w-64 bg-black/40 backdrop-blur-md border-r border-white/10 p-4 flex flex-col gap-4 z-40 h-full select-none">
             <div className="text-sm font-semibold text-gray-400 mb-2">Nodes</div>
 
-            <div
-                className={`
-                    flex items-center gap-3 p-3 rounded-lg border border-white/10 bg-white/5 transition-all
-                    ${hasStartNode
-                        ? 'opacity-50 cursor-not-allowed grayscale'
-                        : 'cursor-grab hover:bg-white/10 hover:border-white/20 active:cursor-grabbing'
-                    }
-                `}
-                onDragStart={(event) => !hasStartNode && onDragStart(event, 'startNode', 'Start Workflow')}
-                draggable={!hasStartNode}
-            >
-                <div className="p-2 rounded bg-blue-500/20 text-blue-400">
-                    <Play size={20} />
-                </div>
-                <div className="flex flex-col">
-                    <span className="text-sm font-medium text-gray-200">Start Node</span>
-                    <span className="text-xs text-gray-500">Entry point</span>
-                </div>
-            </div>
+            {toolsMenu.map((plugin) => {
+                const isSingleton = SINGLETON_TYPES.has(plugin.id);
+                const alreadyExists = isSingleton && nodes.some(n => n.type === plugin.id);
+                const disabled = alreadyExists;
 
-            <div
-                className="flex items-center gap-3 p-3 rounded-lg border border-white/10 bg-white/5 cursor-grab hover:bg-white/10 hover:border-white/20 active:cursor-grabbing transition-all"
-                onDragStart={(event) => onDragStart(event, 'commandNode', 'Command')}
-                draggable
-            >
-                <div className="p-2 rounded bg-orange-500/20 text-orange-400">
-                    <Sparkles size={20} />
-                </div>
-                <div className="flex flex-col">
-                    <span className="text-sm font-medium text-gray-200">Command Node</span>
-                    <span className="text-xs text-gray-500">Generate commands</span>
-                </div>
-            </div>
+                const colors = colorMap[plugin.category] || { bg: 'bg-purple-500/20', text: 'text-purple-400' };
+                const icon = iconMap[plugin.id] || <Puzzle size={20} />;
+
+                return (
+                    <div
+                        key={plugin.id}
+                        className={`
+                            flex items-center gap-3 p-3 rounded-lg border border-white/10 bg-white/5 transition-all
+                            ${disabled
+                                ? 'opacity-50 cursor-not-allowed grayscale'
+                                : 'cursor-grab hover:bg-white/10 hover:border-white/20 active:cursor-grabbing'
+                            }
+                        `}
+                        onDragStart={(event) => !disabled && onDragStart(event, plugin.id, plugin.name)}
+                        draggable={!disabled}
+                    >
+                        <div className={`p-2 rounded ${colors.bg} ${colors.text}`}>
+                            {icon}
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-sm font-medium text-gray-200">{plugin.name}</span>
+                            <span className="text-xs text-gray-500">{plugin.description}</span>
+                        </div>
+                    </div>
+                );
+            })}
         </aside>
     );
 });

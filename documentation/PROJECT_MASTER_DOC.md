@@ -1,7 +1,7 @@
 # FlowX2 Project Documentation
 
-**Date:** February 2, 2026
-**Version:** 3.0 (Async Engine & Sudo Lock)
+**Date:** February 13, 2026
+**Version:** 4.0 (Async Engine, PTY Isolation & Sudo Lock)
 **Author:** Antigravity (Google DeepMind)
 
 ---
@@ -33,19 +33,18 @@ The frontend is built for high-performance visual interaction using **ReactFlow*
 ### 2.2 Backend Architecture (FastAPI + AsyncGraphExecutor)
 The backend is a strictly typed, event-driven engine optimized for speed and security.
 
-*   **Modular Node Architecture**:
-    *   Located in `backend/nodes/`.
-    *   Each node type (e.g., `command`, `start`) has its own directory containing:
-        *   `node.py`: The execution logic implementing `FlowXNode` protocol.
-        *   `schema.py`: Pydantic models.
-        *   `service.py`: Auxiliary services (e.g., AI Generation).
+*   **Modular Node Architecture (Plugin System)**:
+    *   Located in `plugins/`. Each plugin (e.g., `CommandNode`, `VaultNode`) has its own directory with `frontend/` and `backend/` subdirectories.
+    *   `backend/node.py`: The execution logic implementing `FlowXNode` protocol.
+    *   `frontend/`: React components for the node UI.
 *   **Async Execution Engine (v3.0)**:
     *   Replaced LangGraph with a custom **AsyncGraphExecutor**.
     *   **Parallelism**: Uses `asyncio.Future` for non-blocking, parallel node execution.
     *   **Crash Recovery**: Resumes execution from the last successful state stored in MongoDB `runs` collection.
-*   **Security Engine (Sudo Lock)**:
+*   **Security Engine (PTY Isolation + Sudo Lock)**:
     *   **Pre-Flight Authorization**: Sudo passwords are collected securely via a frontend modal *before* execution starts.
-    *   **SudoKeepAlive**: A background context manager refreshes the sudo timestamp, allowing `sudo -n` commands to run instantly without interactive prompts.
+    *   **True PTY Isolation**: Each node spawns its own isolated Pseudo-Terminal via `pexpect`, eliminating sudo caching race conditions between parallel nodes.
+    *   **Hybrid Runner** (`engine/pty_runner.py`): Two-phase design — authentication with custom prompt, then high-speed `readline()` streaming. A bash `trap EXIT` guarantees background refresher cleanup.
     *   **Secure Injection**: Passwords are never stored permanently, only held in memory during the execution lifecycle.
 
 ---

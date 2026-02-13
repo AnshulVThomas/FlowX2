@@ -1,4 +1,4 @@
-# Async Graph Executor (v3.0)
+# Async Graph Executor (v4.0)
 
 ## Overview
 The `AsyncGraphExecutor` is a high-performance, strictly typed execution engine designed to replace the heavier `LangGraph` implementation. It leverages Python's `asyncio` to execute independent nodes in parallel while respecting dependency constraints.
@@ -14,7 +14,7 @@ Unlike sequential runners, `AsyncGraphExecutor` schedules all nodes as `asyncio.
 ### 2. Live Streaming via WebSockets
 The executor is tightly coupled with a WebSocket emitter.
 - **Node Status**: Emits `running`, `completed`, or `failed` events in real-time.
-- **Log Streaming**: Captures `stdout` and `stderr` from subprocesses and streams them line-by-line to the frontend.
+- **Log Streaming**: Each node runs inside an isolated PTY via `execute_in_pty()` (`engine/pty_runner.py`). Output is streamed line-by-line from the PTY thread back to the asyncio event loop using `asyncio.run_coroutine_threadsafe`, then emitted to the frontend over WebSocket.
 
 ### 3. Crash Recovery (Re-Hydration)
 The executor supports resuming from a crashed state without re-running completed nodes.

@@ -97,7 +97,7 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
         e.stopPropagation();
 
         // 1. If running, Abort
-        if (isValidating) { // Note: 'isValidating' is a proxy for 'starting'. Real status is in data.
+        if (isValidating) {
             toast.info('Requesting Cancellation...');
             await abortWorkflow();
             return;
@@ -105,15 +105,26 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
 
         // 2. Pre-Flight Sudo Check
         const allNodes = useWorkflowStore.getState().nodes;
-        const lockNodes = allNodes.filter(n => n.data.locked || n.data.sudoLock);
+        const requiresSudo = allNodes.some(n => n.data?.locked || n.data?.sudoLock);
 
-        if (lockNodes.length > 0) {
-            setSudoCount(lockNodes.length);
-            setShowSudoModal(true);
+        if (requiresSudo) {
+            // 3. Sweep canvas for VaultNode
+            const vaultNode = allNodes.find(n => n.type === 'vaultNode');
+            const savedPassword = vaultNode?.data?.sudoPassword;
+
+            if (savedPassword && String(savedPassword).trim() !== '') {
+                // Vault found and populated — run silently, bypass modal
+                await runExecution(String(savedPassword));
+            } else {
+                // No Vault or empty — fallback to manual modal
+                const lockNodes = allNodes.filter(n => n.data?.locked || n.data?.sudoLock);
+                setSudoCount(lockNodes.length);
+                setShowSudoModal(true);
+            }
             return;
         }
 
-        // 3. Normal Execution
+        // 4. Normal Execution (no sudo needed)
         await runExecution();
 
     }, [isValidating, abortWorkflow, runExecution]);

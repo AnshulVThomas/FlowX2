@@ -18,7 +18,7 @@ import { fetchSystemInfo } from '../../services/api';
 import '@xyflow/react/dist/style.css';
 
 // LOAD PLUGINS (Static at build time via import.meta.glob)
-const { nodeTypes: pluginNodeTypes, toolsMenu: pluginTools } = loadPlugins();
+const { nodeTypes: pluginNodeTypes } = loadPlugins();
 
 const nodeTypes = {
     ...pluginNodeTypes,
@@ -95,6 +95,8 @@ export function Canvas() {
                     history: [],
                     system_context: systemContext ? structuredClone(systemContext) : {}
                 };
+            } else if (type === 'vaultNode') {
+                data = { sudoPassword: '' };
             }
 
             const newNode = {

@@ -10,7 +10,7 @@ SKIP_BRANCH = object()
 # Edge handles that are configuration-only (not execution flow)
 CONFIG_HANDLES = {'api-handle', 'tool-handle'}
 # Node types that are configuration-only and should not be executed
-CONFIG_NODE_TYPES = {'apiConfig', 'toolCircle'}
+CONFIG_NODE_TYPES = {'apiConfig', 'toolCircle', 'vaultNode'}
 
 class AsyncGraphExecutor:
     def __init__(self, workflow_data: dict, emit_event=None, thread_id: str = None, global_context: dict = None, initial_state: dict = None):

@@ -1,0 +1,9 @@
+{
+    "id": "vaultNode",
+    "name": "Credentials Vault",
+    "category": "Configuration",
+    "description": "Stores global secrets like sudo passwords for the workflow.",
+    "color": "#eab308",
+    "backend_class": "VaultNode",
+    "frontend_component": "VaultNodeUI"
+}

@@ -1,4 +1,4 @@
-# Security Design (Sudo Lock)
+# Security Design (Sudo Lock + PTY Isolation)
 
 FlowX2 prioritizes safe and secure execution of privileged commands.
 
@@ -12,24 +12,35 @@ Instead of pausing execution mid-stream (which is difficult in async pipelines),
 - **Modal**: If found, prompts the user for their system password via a secure modal.
 - **Transmission**: The password is sent over HTTPS/WSS in the execution payload (never stored in DB).
 
-### 2. SudoKeepAlive (Context Manager)
-On the backend, a `SudoKeepAlive` class handles the session:
-1.  **Validation**: Runs `sudo -v -S` with the provided password to authenticate.
-2.  **Keep-Alive Loop**: Spawns a background task running `sudo -n -v` every few minutes to refresh the sudo timestamp.
-3.  **Cleanup**: Automatically kills the background loop when the execution context exits.
+### 2. True PTY Isolation (Hybrid Runner)
+On the backend, each node gets its own **isolated Pseudo-Terminal** via `pexpect`, completely eliminating sudo caching race conditions between parallel nodes.
+
+**Architecture**: `engine/pty_runner.py` → `execute_in_pty()`
+
+The Hybrid PTY Runner uses a two-phase approach:
+
+1.  **Authentication Phase**: A bash wrapper script runs `sudo -S -k -p "FLOWX_SUDO_PROMPT:" -v` and the PTY runner injects the password via `pexpect.sendline()`. Wrong passwords are detected instantly via the `Sorry, try again.` pattern.
+2.  **Background Refresher**: After authentication, a background loop (`sudo -n -v` every 50s) keeps the credential alive for long-running commands.
+3.  **Guaranteed Cleanup**: The bash `trap EXIT` command ensures the refresher process is killed even on crash, segfault, or abort.
+4.  **High-Speed Streaming**: After authentication completes, the runner switches to fast `readline()` streaming (no regex overhead) and pipes output to the WebSocket via `asyncio.run_coroutine_threadsafe`.
 
 ### 3. Usage in Nodes
-Command Nodes use the `sudoLock` flag to wrap their execution:
+Command Nodes use the `sudoLock` flag to trigger PTY isolation:
 
 ```python
-# backend/nodes/command/node.py
+# plugins/CommandNode/backend/node.py
 
-if use_sudo_lock:
-    from engine.security import SudoKeepAlive
-    async with SudoKeepAlive(password):
-        # Now 'sudo -n' works without password
-        await run_process("sudo -n apt install ...")
+from engine.pty_runner import execute_in_pty
+
+exit_code, stdout, stderr = await execute_in_pty(
+    command="sudo apt install ...",
+    sudo_password=password_from_vault,
+    on_output=stream_logger
+)
 ```
+
+### 4. Concurrency Safety
+Because each node spawns its own PTY with its own sudo session, parallel nodes **never interfere** with each other's authentication tickets. Node A and Node B can both run `sudo` commands simultaneously without race conditions.
 
 ## Risk Analysis
 
