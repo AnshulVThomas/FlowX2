@@ -1,7 +1,24 @@
 import { useWorkflowStore } from "../../store/useWorkflowStore";
-import { Activity, X, Server, Terminal } from "lucide-react";
-import type { CommandNodeData } from "../../../../plugins/CommandNode/frontend/types";
+import { Activity, X, Server, Terminal, Play, GitMerge } from "lucide-react";
 import { ValidationShield } from "../ValidationShield";
+
+// Node types to show in the process sidebar
+const PROCESS_NODE_TYPES = new Set(['startNode', 'commandNode', 'orMergeNode']);
+
+// Icon mapping per node type
+const getNodeIcon = (type: string) => {
+    switch (type) {
+        case 'startNode': return <Play size={14} className="text-blue-400" />;
+        case 'orMergeNode': return <GitMerge size={14} className="text-amber-400" />;
+        default: return <Terminal size={14} className="text-gray-400" />;
+    }
+};
+
+const getNodeLabel = (node: any) => {
+    if (node.type === 'startNode') return node.data?.name || 'Start Workflow';
+    if (node.type === 'orMergeNode') return node.data?.name || 'OR Merge';
+    return node.data?.ui_render?.title || 'Command Process';
+};
 
 // --- INNER COMPONENT (Only renders when Open) ---
 const ProcessList = () => {
@@ -9,16 +26,15 @@ const ProcessList = () => {
     const validationStatus = useWorkflowStore((state) => state.validationStatus);
     const validationErrors = useWorkflowStore((state) => state.validationErrors);
 
-    // Optimized: Filter nodes. Since 'nodes' changes frequently during drag, 
-    // this component will re-render often IF open. This is acceptable behavior.
-    const processNodes = nodes.filter((n): n is CommandNodeData => n.type === 'commandNode');
+    const processNodes = nodes.filter((n) => PROCESS_NODE_TYPES.has(n.type || ''));
 
-    const getStatus = (node: CommandNodeData) => {
-        // Tier 3: Priority to real-time status
+    const getStatus = (node: any) => {
         if (node.data.execution_status) {
             return node.data.execution_status;
         }
-        // Legacy fallback
+        if (node.data.status) {
+            return node.data.status;
+        }
         if (node.data.history && node.data.history.length > 0) {
             const last = node.data.history[0];
             if (last.type === 'executed' && last.status) return last.status;
@@ -39,7 +55,6 @@ const ProcessList = () => {
         <div className="space-y-3">
             {processNodes.map(node => {
                 const status = getStatus(node);
-                // Map status to badge style
                 let badgeClass = 'bg-gray-500/20 text-gray-400';
                 let label = status.toUpperCase();
 
@@ -52,6 +67,9 @@ const ProcessList = () => {
                 } else if (status === 'failure' || status === 'failed') {
                     badgeClass = 'bg-rose-500/20 text-rose-300';
                     label = 'ERROR';
+                } else if (status === 'skipped') {
+                    badgeClass = 'bg-gray-500/20 text-gray-400';
+                    label = 'SKIPPED';
                 } else if (status === 'attention_required') {
                     badgeClass = 'bg-yellow-500/20 text-yellow-300 animate-pulse';
                     label = 'WAITING';
@@ -60,9 +78,9 @@ const ProcessList = () => {
                 return (
                     <div key={node.id} className="bg-white/5 border border-white/10 rounded-lg p-3 hover:bg-white/10 transition-colors">
                         <div className="flex items-center gap-2 mb-1">
-                            <Terminal size={14} className="text-gray-400" />
+                            {getNodeIcon(node.type || '')}
                             <span className="text-sm font-medium text-gray-200 truncate flex-grow">
-                                {node.data.ui_render?.title || 'Command Process'}
+                                {getNodeLabel(node)}
                             </span>
                             <ValidationShield status={validationStatus[node.id]} errors={validationErrors?.[node.id]} />
                         </div>
@@ -83,15 +101,13 @@ const ProcessList = () => {
 
 // --- MAIN COMPONENT ---
 export function ProcessSidebar() {
-    // Only subscribe to isOpen here. 
-    // This prevents the heavy 'nodes' subscription from firing when sidebar is closed.
     const isOpen = useWorkflowStore((state) => state.isProcessSidebarOpen);
     const toggle = useWorkflowStore((state) => state.toggleProcessSidebar);
 
     return (
         <div
             className={`
-                fixed right-0 top-16 bottom-0 z-40
+                fixed right-0 top-0 bottom-0 z-40
                 w-80 bg-black/80 backdrop-blur-xl border-l border-white/10
                 transform transition-transform duration-300 ease-in-out
                 flex flex-col
@@ -112,7 +128,6 @@ export function ProcessSidebar() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4">
-                {/* CONDITIONAL RENDERING: Only mount the list if open */}
                 {isOpen && <ProcessList />}
             </div>
         </div>

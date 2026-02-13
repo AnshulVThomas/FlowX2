@@ -114,12 +114,17 @@ class AsyncGraphExecutor:
             task = asyncio.create_task(self._execute_plugin(node, inputs={}))
             active_tasks.add(task)
 
-        # 2.5 CRASH RECOVERY: Kick off any nodes whose inboxes are already ready
-        #     (their parents were completed in initial_state)
+        # 2.5 CRASH RECOVERY: Kick off any nodes whose inboxes were pre-filled
+        #     Only check nodes that actually received data during re-hydration
         for node in self.nodes:
-            if self.node_status[node["id"]] == "pending" and self._check_if_ready(node):
-                self.node_status[node["id"]] = "running"
-                child_inputs = self.node_inboxes[node["id"]].copy()
+            nid = node["id"]
+            if node.get("type") in ALLOWED_TRIGGERS:
+                continue  # Already handled in step 2
+            if not self.node_inboxes[nid]:
+                continue  # Empty inbox = nothing pushed here, skip
+            if self.node_status[nid] == "pending" and self._check_if_ready(node):
+                self.node_status[nid] = "running"
+                child_inputs = self.node_inboxes[nid].copy()
                 task = asyncio.create_task(self._execute_plugin(node, child_inputs))
                 active_tasks.add(task)
 

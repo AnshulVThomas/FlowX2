@@ -6,7 +6,7 @@ This document explains the core execution flow and how the plugin system integra
 
 ## 1. High-Level Architecture
 
-FlowX uses a **Dynamic Async Graph Execution Engine** built on `langgraph`. The system compiles frontend nodes and edges into an executable graph at runtime.
+FlowX uses a **Push-Based Async Graph Execution Engine**. The engine starts at trigger nodes and pushes results forward through edges, evaluating routing conditions at each hop.
 
 ### Key Components
 
@@ -14,14 +14,15 @@ FlowX uses a **Dynamic Async Graph Execution Engine** built on `langgraph`. The 
     -   Dynamically loads plugins from `plugins/` directory.
     -   Maps `node_type` strings (e.g., "commandNode") to Python classes.
 
-2.  **Graph Builder (`backend/engine/builder.py`)**
-    -   Compiles the JSON workflow execution graph into a `langgraph` StateGraph.
-    -   Validates connections and injects global context (secrets, thread_id).
+2.  **Node Protocol (`backend/engine/protocol.py`)**
+    -   Defines the `FlowXNode` base class with `execute()`, `validate()`, `get_wait_strategy()`.
+    -   Nodes declare their parent-waiting behavior: `"ALL"` (AND-join) or `"ANY"` (OR-merge).
 
 3.  **Async Executor (`backend/engine/async_runner.py`)**
-    -   Orchestrates execution step-by-step.
-    -   Manages concurrency, logging, and status updates via WebSocket.
-    -   Delegates actual work to the Plugin Classes.
+    -   **Push-based forward traversal** — starts at triggers, pushes through edges.
+    -   **Inbox system** — parents deposit results into child inboxes; children fire when ready.
+    -   Manages concurrency, edge routing, logging, and WebSocket status updates.
+    -   Supports crash recovery via `initial_state` re-hydration.
 
 4.  **PTY Runner (`backend/engine/pty_runner.py`)**
     -   The low-level workhorse for command execution.
@@ -60,24 +61,26 @@ plugins/CommandNode/
     -   Vite scans `plugins/*/frontend/index.tsx`.
     -   Dynamically registers components in the Node Palette.
 
-### execution Flow: Step-by-Step
+### Execution Flow: Step-by-Step
 
 When you click "Run Workflow":
 
 1.  **Frontend**: Sends JSON payload to `/api/v1/workflow/execute`.
 2.  **API**: Instantiates `AsyncGraphExecutor`.
-3.  **Executor**:
-    -   Traverses the graph.
-    -   For each node, calls `NodeRegistry.get_node(node_type)`.
-    -   Instantiates the plugin class: `node_instance = PluginClass(node_data)`.
-    -   Calls `await node_instance.execute(context, payload)`.
+3.  **Executor** (push-based):
+    -   Identifies trigger nodes (`startNode`, `webhookNode`, etc.).
+    -   Executes triggers first.
+    -   On completion, evaluates outgoing edges (`conditional`, `force`, `failure`).
+    -   Drops result into child node's inbox.
+    -   Checks if child is ready (`_check_if_ready` using `wait_strategy`).
+    -   Fires ready children; repeats until no active tasks.
 4.  **Plugin (`node.py`)**:
-    -   Executes specific logic (e.g., specific PTY command).
+    -   Executes specific logic (e.g., PTY command, OR merge).
     -   Streams logs back via `emit("node_log", ...)` callback.
     -   Returns `{"status": "success", "results": ...}`.
 5.  **Executor**:
-    -   Updates Graph State.
-    -   Proceeds to next node.
+    -   Pushes result forward to children.
+    -   Floating/disconnected nodes are never reached.
 
 ---
 
@@ -98,5 +101,15 @@ To add a new feature (e.g., "Docker Node"):
 1.  Create `plugins/DockerNode/`.
 2.  Define `manifest.json` (`id="dockerNode"`).
 3.  Implement `backend/node.py` (inherit from `FlowXNode`, implement `execute`).
-4.  Implement `frontend/index.tsx` (React component).
-5.  Restart Backend. The registry auto-discovers it.
+4.  Override `get_wait_strategy()` if needed (e.g., `"ANY"` for merge nodes).
+5.  Implement `frontend/index.tsx` (React component).
+6.  Restart Backend. The registry auto-discovers it.
+
+### Existing Plugins
+
+| Plugin | Type | Wait Strategy | Purpose |
+|--------|------|--------------|--------|
+| StartNode | Trigger | ALL | Entry point, starts workflow |
+| CommandNode | Execution | ALL | Runs shell commands via PTY |
+| VaultNode | Config | N/A | Stores secrets (not executed) |
+| ORMergeNode | Flow Control | ANY | Discriminator — first branch wins |
