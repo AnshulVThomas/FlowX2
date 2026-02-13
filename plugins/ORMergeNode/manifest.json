@@ -1,0 +1,9 @@
+{
+    "id": "orMergeNode",
+    "name": "OR Merge",
+    "category": "Flow Control",
+    "description": "Discriminator gate: fires on the first branch to arrive, discards the rest.",
+    "color": "#f59e0b",
+    "backend_class": "ORMergeNode",
+    "frontend_component": "ORMergeNodeUI"
+}

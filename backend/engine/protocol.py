@@ -43,3 +43,11 @@ class FlowXNode(ABC):
         e.g. {'requires_pty': True, 'is_interactive': False}
         """
         pass
+
+    def get_wait_strategy(self) -> str:
+        """
+        Determines how the engine waits for parent nodes.
+        - "ALL": Wait for every parent to complete (default, AND-join).
+        - "ANY": Fire on the first parent to complete (OR-merge / discriminator).
+        """
+        return "ALL"
