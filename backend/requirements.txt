@@ -1,5 +1,15 @@
 fastapi
 uvicorn
 motor
-langgraph
+pydantic
+python-dotenv
+requests
 groq
+langchain
+langchain-core
+langgraph
+langgraph-checkpoint-mongodb
+pymongo
+google-genai
+websockets
+psutil
