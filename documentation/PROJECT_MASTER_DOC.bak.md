@@ -1,0 +1,114 @@
+# FlowX2 Project Documentation
+
+**Date:** February 13, 2026
+**Version:** 4.0 (Async Engine, PTY Isolation & Sudo Lock)
+**Author:** Antigravity (Google DeepMind)
+
+---
+
+## 1. Executive Summary
+
+FlowX2 is an advanced, AI-powered workflow automation platform designed for Linux environments. It allows users to visually chain shell commands, automate complex system tasks, and leverage Generative AI to translate natural language into safe, executable Bash scripts.
+
+The system distinguishes itself through a rigorous focus on **Safety** (Risk Analysis, Sudo handling), **Performance** (60fps ReactFlow rendering), and **Developer Experience** (Modular Node Protocol).
+
+---
+
+## 2. System Architecture
+
+### 2.1 Frontend Architecture (React + Zustand)
+The frontend is built for high-performance visual interaction using **ReactFlow**.
+
+*   **State Management**: Uses **Zustand** with a "Dual-Subscription" pattern.
+    *   **Global Store**: Manages the list of workflows.
+    *   **Canvas Store**: Subscribes directly to high-frequency changes (node dragging) to prevent full-app re-renders.
+*   **Dual-Terminal System (IDE Pattern)**:
+    *   **Concept**: Separates "Execution Logs" from "Interactive Debugging".
+    *   **Implementation**: A custom Tab Bar switch between a read-only Stream View and a fully interactive PTY Session.
+    *   **Performance**: Uses "Lazy Connection" logic. The interactive WebSocket only connects when the user explicitly opens the "TERMINAL" tab, saving resources.
+*   **Visual Feedback**:
+    *   **Border Animations**: Nodes use specific border colors/pulses to indicate state (Generating, Running, Validation Error, Execution Error).
+    *   **Validation Shield**: A dedicated icon on every node that reflects the backend's pre-flight validation status.
+
+### 2.2 Backend Architecture (FastAPI + AsyncGraphExecutor)
+The backend is a strictly typed, event-driven engine optimized for speed and security.
+
+*   **Modular Node Architecture (Plugin System)**:
+    *   Located in `plugins/`. Each plugin (e.g., `CommandNode`, `VaultNode`) has its own directory with `frontend/` and `backend/` subdirectories.
+    *   `backend/node.py`: The execution logic implementing `FlowXNode` protocol.
+    *   `frontend/`: React components for the node UI.
+*   **Async Execution Engine (v3.0)**:
+    *   Replaced LangGraph with a custom **AsyncGraphExecutor**.
+    *   **Parallelism**: Uses `asyncio.Future` for non-blocking, parallel node execution.
+    *   **Crash Recovery**: Resumes execution from the last successful state stored in MongoDB `runs` collection.
+*   **Security Engine (PTY Isolation + Sudo Lock)**:
+    *   **Pre-Flight Authorization**: Sudo passwords are collected securely via a frontend modal *before* execution starts.
+    *   **True PTY Isolation**: Each node spawns its own isolated Pseudo-Terminal via `pexpect`, eliminating sudo caching race conditions between parallel nodes.
+    *   **Hybrid Runner** (`engine/pty_runner.py`): Two-phase design — authentication with custom prompt, then high-speed `readline()` streaming. A bash `trap EXIT` guarantees background refresher cleanup.
+    *   **Secure Injection**: Passwords are never stored permanently, only held in memory during the execution lifecycle.
+
+---
+
+## 3. Core Features
+
+### 3.1 AI Command Generation
+*   **Input**: User types "Install Docker".
+*   **Process**: System captures OS context (Arch Linux, Kernel 6.1) -> Sends to Gemini model -> Generates optimal `pacman` command.
+*   **Risk Analysis**: The AI assigns a Risk Level (SAFE, CAUTION, CRITICAL). "CRITICAL" commands lock the UI until manually approved.
+
+### 3.2 The Dual-Terminal Experience
+One of FlowX2's signature features is the decoupling of process output from user interaction.
+
+| Feature | Output Tab | Terminal Tab |
+| :--- | :--- | :--- |
+| **Purpose** | Watch the running workflow | Manually debug or check files |
+| **Connection** | `ws://.../workflow` (Broadcast) | `ws://.../terminal` (Private PTY) |
+| **Input** | Read-Only | Fully Interactive (xterm.js) |
+| **Lifecycle** | Persists during workflow run | Created on demand, destroyed on close |
+
+### 3.3 Visual Validation System
+The UI provides immediate feedback on the validity of the graph.
+
+*   Priority Order for Border Colors:
+    1.  **Selection** (Blue)
+    2.  **Running** (Indigo Pulse)
+    3.  **Password Required** (Amber Pulse)
+    4.  **Validation Failed** (Amber Pulse - Configuration Error)
+    5.  **Execution Failed** (Red - Runtime Error)
+    6.  **Success** (Green)
+
+---
+
+## 4. Developer Guide
+
+### 4.1 Adding a New Node Type
+To extend FlowX2, follow the **Modular Node Protocol**:
+
+1.  **Create Directory**: `backend/nodes/mynode/`
+2.  **Implement Protocol**:
+    ```python
+    from engine.protocol import FlowXNode
+    class MyNode(FlowXNode):
+        def validate(self, data): ...
+        async def execute(self, ctx, payload): ...
+    ```
+3.  **Register**: Add to `backend/engine/validator.py`:
+    ```python
+    NodeRegistry.register("myNode", MyNode)
+    ```
+
+### 4.2 Database Schema
+*   **Workflows Collection**: Stores the definition (JSON).
+*   **Checkpoints Collection**: Stores the runtime state (LangGraph Checkpointer).
+
+---
+
+## 5. Usage Guide
+
+1.  **Create Workflow**: Click "+" in the navbar.
+2.  **Add Node**: Drag "Command Node" from the sidebar.
+3.  **Generate**: Type a prompt ("Update System") and hit Generate.
+4.  **Connect**: Draw an edge from Start Node to Command Node.
+5.  **Run**: Click the Play button.
+    *   Watch logs in the **OUTPUT** tab.
+    *   If it fails (e.g., file not found), open **TERMINAL** tab to investigate manually `ls -la`.
