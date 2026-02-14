@@ -1,23 +1,46 @@
+import { useMemo } from "react";
 import { useWorkflowStore } from "../../store/useWorkflowStore";
-import { Activity, X, Server, Terminal, Play, GitMerge } from "lucide-react";
+import { Activity, X, Server, Terminal, Play, GitMerge, Shield } from "lucide-react";
 import { ValidationShield } from "../ValidationShield";
+import { loadPlugins, type PluginManifest } from "../../registry/pluginLoader";
 
-// Node types to show in the process sidebar
-const PROCESS_NODE_TYPES = new Set(['startNode', 'commandNode', 'orMergeNode']);
+// Load plugin metadata once
+const { toolsMenu } = loadPlugins();
+const manifestMap = new Map<string, PluginManifest>(toolsMenu.map(m => [m.id, m]));
 
-// Icon mapping per node type
-const getNodeIcon = (type: string) => {
-    switch (type) {
-        case 'startNode': return <Play size={14} className="text-blue-400" />;
-        case 'orMergeNode': return <GitMerge size={14} className="text-amber-400" />;
-        default: return <Terminal size={14} className="text-gray-400" />;
-    }
+// Icon per node type
+const ICON_MAP: Record<string, React.ReactElement> = {
+    startNode: <Play size={14} className="text-blue-400" />,
+    commandNode: <Terminal size={14} className="text-gray-400" />,
+    orMergeNode: <GitMerge size={14} className="text-amber-400" />,
+    vaultNode: <Shield size={14} className="text-yellow-400" />,
 };
 
+// Category display order
+const CATEGORY_ORDER = ['Core', 'System', 'Flow Control', 'Configuration'];
+
 const getNodeLabel = (node: any) => {
-    if (node.type === 'startNode') return node.data?.name || 'Start Workflow';
-    if (node.type === 'orMergeNode') return node.data?.name || 'OR Merge';
-    return node.data?.ui_render?.title || 'Command Process';
+    const manifest = manifestMap.get(node.type || '');
+    if (node.data?.ui_render?.title) return node.data.ui_render.title;
+    if (node.data?.name) return node.data.name;
+    return manifest?.name || node.type || 'Unknown';
+};
+
+const getStatusBadge = (status: string) => {
+    switch (status) {
+        case 'running': case 'pending':
+            return { cls: 'bg-indigo-500/20 text-indigo-300', label: 'RUNNING' };
+        case 'success': case 'completed':
+            return { cls: 'bg-emerald-500/20 text-emerald-300', label: 'SUCCESS' };
+        case 'failure': case 'failed':
+            return { cls: 'bg-rose-500/20 text-rose-300', label: 'ERROR' };
+        case 'skipped':
+            return { cls: 'bg-gray-500/20 text-gray-400', label: 'SKIPPED' };
+        case 'attention_required':
+            return { cls: 'bg-yellow-500/20 text-yellow-300 animate-pulse', label: 'WAITING' };
+        default:
+            return { cls: 'bg-gray-500/20 text-gray-400', label: 'IDLE' };
+    }
 };
 
 // --- INNER COMPONENT (Only renders when Open) ---
@@ -26,75 +49,77 @@ const ProcessList = () => {
     const validationStatus = useWorkflowStore((state) => state.validationStatus);
     const validationErrors = useWorkflowStore((state) => state.validationErrors);
 
-    const processNodes = nodes.filter((n) => PROCESS_NODE_TYPES.has(n.type || ''));
+    // Group nodes by category from manifest
+    const grouped = useMemo(() => {
+        const groups: Record<string, any[]> = {};
+        for (const node of nodes) {
+            const manifest = manifestMap.get(node.type || '');
+            if (!manifest) continue;
+            if (manifest.executable === false) continue; // Non-executable config nodes
+            const cat = manifest.category || 'Other';
+            if (!groups[cat]) groups[cat] = [];
+            groups[cat].push(node);
+        }
+        return groups;
+    }, [nodes]);
 
-    const getStatus = (node: any) => {
-        if (node.data.execution_status) {
-            return node.data.execution_status;
-        }
-        if (node.data.status) {
-            return node.data.status;
-        }
-        if (node.data.history && node.data.history.length > 0) {
-            const last = node.data.history[0];
-            if (last.type === 'executed' && last.status) return last.status;
-        }
-        return 'idle';
-    };
+    const sortedCategories = CATEGORY_ORDER.filter(c => grouped[c]?.length);
+    // Add any categories not in the predefined order
+    for (const cat of Object.keys(grouped)) {
+        if (!sortedCategories.includes(cat)) sortedCategories.push(cat);
+    }
 
-    if (processNodes.length === 0) {
+    if (sortedCategories.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center h-40 text-gray-500 gap-2">
                 <Server size={24} className="opacity-20" />
-                <span className="text-sm">No active processes</span>
+                <span className="text-sm">No nodes in workflow</span>
             </div>
         );
     }
 
     return (
-        <div className="space-y-3">
-            {processNodes.map(node => {
-                const status = getStatus(node);
-                let badgeClass = 'bg-gray-500/20 text-gray-400';
-                let label = status.toUpperCase();
-
-                if (status === 'running' || status === 'pending') {
-                    badgeClass = 'bg-indigo-500/20 text-indigo-300';
-                    label = 'RUNNING';
-                } else if (status === 'success' || status === 'completed') {
-                    badgeClass = 'bg-emerald-500/20 text-emerald-300';
-                    label = 'SUCCESS';
-                } else if (status === 'failure' || status === 'failed') {
-                    badgeClass = 'bg-rose-500/20 text-rose-300';
-                    label = 'ERROR';
-                } else if (status === 'skipped') {
-                    badgeClass = 'bg-gray-500/20 text-gray-400';
-                    label = 'SKIPPED';
-                } else if (status === 'attention_required') {
-                    badgeClass = 'bg-yellow-500/20 text-yellow-300 animate-pulse';
-                    label = 'WAITING';
-                }
-
-                return (
-                    <div key={node.id} className="bg-white/5 border border-white/10 rounded-lg p-3 hover:bg-white/10 transition-colors">
-                        <div className="flex items-center gap-2 mb-1">
-                            {getNodeIcon(node.type || '')}
-                            <span className="text-sm font-medium text-gray-200 truncate flex-grow">
-                                {getNodeLabel(node)}
-                            </span>
-                            <ValidationShield status={validationStatus[node.id]} errors={validationErrors?.[node.id]} />
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-500 font-mono truncate max-w-[150px]">
-                                {node.id}
-                            </span>
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${badgeClass}`}>
-                                {label}
-                            </span>
-                        </div>
+        <div className="space-y-5">
+            {sortedCategories.map(category => (
+                <div key={category}>
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-500">
+                            {category}
+                        </span>
+                        <span className="text-[10px] text-gray-600">
+                            ({grouped[category].length})
+                        </span>
+                        <div className="flex-1 border-t border-white/5" />
                     </div>
-                );
-            })}
+                    <div className="space-y-2">
+                        {grouped[category].map((node: any) => {
+                            const status = node.data?.execution_status || 'idle';
+                            const badge = getStatusBadge(status);
+                            const manifest = manifestMap.get(node.type || '');
+
+                            return (
+                                <div key={node.id} className="bg-white/5 border border-white/10 rounded-lg p-3 hover:bg-white/10 transition-colors">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        {ICON_MAP[node.type] || <Terminal size={14} className="text-gray-400" />}
+                                        <span className="text-sm font-medium text-gray-200 truncate flex-grow">
+                                            {getNodeLabel(node)}
+                                        </span>
+                                        <ValidationShield status={validationStatus[node.id]} errors={validationErrors?.[node.id]} />
+                                    </div>
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-gray-500 truncate max-w-[150px]" title={manifest?.name}>
+                                            {manifest?.name || node.type}
+                                        </span>
+                                        <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${badge.cls}`}>
+                                            {badge.label}
+                                        </span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            ))}
         </div>
     );
 };

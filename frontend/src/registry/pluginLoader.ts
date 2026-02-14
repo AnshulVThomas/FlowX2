@@ -11,6 +11,7 @@ export interface PluginManifest {
     color: string;
     description: string;
     singleton?: boolean;
+    executable?: boolean; // defaults true; set false for config-only nodes
     backend_class: string;
     frontend_component: string;
 }
