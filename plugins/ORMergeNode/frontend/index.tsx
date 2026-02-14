@@ -21,10 +21,12 @@ const getStatusStyles = (status: string | undefined, isSelected: boolean) => {
     switch (s) {
         case 'running':
             borderColor = 'border-amber-400';
-            ringClass = 'ring-4 ring-amber-500/20';
+            if (!isSelected) {
+                ringClass = 'ring-4 ring-amber-500/20';
+                shadow = 'shadow-xl shadow-amber-500/20';
+            }
             statusText = 'text-amber-500';
             iconBg = 'bg-amber-100';
-            shadow = 'shadow-xl shadow-amber-500/20';
             break;
         case 'completed':
             borderColor = 'border-green-500';
@@ -32,7 +34,7 @@ const getStatusStyles = (status: string | undefined, isSelected: boolean) => {
             iconColor = 'text-green-600';
             iconBg = 'bg-green-50';
             iconBorder = 'border-green-200';
-            shadow = 'shadow-lg shadow-green-500/15';
+            if (!isSelected) shadow = 'shadow-lg shadow-green-500/15'; // Only if not selected
             break;
         case 'failed':
             borderColor = 'border-red-500';
@@ -40,7 +42,7 @@ const getStatusStyles = (status: string | undefined, isSelected: boolean) => {
             iconColor = 'text-red-600';
             iconBg = 'bg-red-50';
             iconBorder = 'border-red-200';
-            shadow = 'shadow-lg shadow-red-500/15';
+            if (!isSelected) shadow = 'shadow-lg shadow-red-500/15';
             break;
         case 'skipped':
             borderColor = 'border-gray-300';
@@ -48,14 +50,19 @@ const getStatusStyles = (status: string | undefined, isSelected: boolean) => {
             iconColor = 'text-gray-400';
             iconBg = 'bg-gray-50';
             iconBorder = 'border-gray-200';
-            shadow = 'shadow-md';
+            if (!isSelected) shadow = 'shadow-md';
             break;
         default:
-            if (isSelected) {
-                borderColor = 'border-amber-500';
-                ringClass = 'ring-2 ring-amber-500/20';
-            }
             break;
+    }
+
+    // Force Selection Style
+    if (isSelected) {
+        // Option A: Blue Ring + Blue Shadow (CommandNode style)
+        // AND maybe Blue Border? 
+        borderColor = 'border-blue-500'; // Override amber border
+        ringClass = 'ring-2 ring-blue-500';
+        shadow = 'shadow-xl shadow-blue-500/30';
     }
 
     return { borderColor, ringClass, statusText, iconBg, iconBorder, iconColor, shadow };

@@ -21,11 +21,28 @@ const getStatusStyles = (status: string | undefined, isSelected: boolean) => {
     let ringClass = '';
     let textClass = 'text-gray-400';
     let bgClass = 'bg-white';
+    let shadowClass = 'shadow-lg shadow-stone-200/50';
+
+    if (isSelected) {
+        borderClass = 'border-blue-500';
+        ringClass = 'ring-2 ring-blue-500';
+        shadowClass = 'shadow-xl shadow-blue-500/30';
+    }
 
     switch (s) {
         case 'running':
             borderClass = 'border-blue-400';
-            ringClass = 'ring-4 ring-blue-500/20';
+            // Selection overrides running ring if needed, or we combine?
+            // CommandNode: if selected, uses Blue Ring. If running, uses Purple.
+            // Priority: Selected > Running? Or Running > Selected? 
+            // CommandNode code: if (selected) { ... } else if (running) { ... }
+            // So Selection takes priority for Ring/Shadow.
+
+            if (!isSelected) {
+                ringClass = 'ring-1 ring-blue-500/20'; // Running glow if not selected
+                // Actually StartNode used 'ring-4 ring-blue-500/20' for running.
+                ringClass = 'ring-4 ring-blue-500/20';
+            }
             textClass = 'text-blue-500';
             break;
         case 'completed':
@@ -37,20 +54,16 @@ const getStatusStyles = (status: string | undefined, isSelected: boolean) => {
             textClass = 'text-red-500';
             break;
         default: // idle
-            if (isSelected) {
-                borderClass = 'border-blue-500';
-                ringClass = 'ring-2 ring-blue-500/20';
-            }
             break;
     }
 
-    if (isSelected && s !== 'idle') {
-        if (s === 'completed' || s === 'failed') {
-            ringClass = 'ring-2 ring-offset-1 ' + (s === 'completed' ? 'ring-green-500/40' : 'ring-red-500/40');
-        }
+    // CommandNode logic: Selected WINS.
+    if (isSelected) {
+        ringClass = "ring-2 ring-blue-500";
+        shadowClass = "shadow-xl shadow-blue-500/30";
     }
 
-    return { borderClass, ringClass, textClass, bgClass };
+    return { borderClass, ringClass, textClass, bgClass, shadowClass };
 };
 
 const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) => {
@@ -148,6 +161,7 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
                 ${styles.bgClass}
                 ${styles.borderClass}
                 ${styles.ringClass}
+                ${styles.shadowClass}
             `}>
                 <ValidationShield
                     status={validationStatus}
