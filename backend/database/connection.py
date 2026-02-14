@@ -1,7 +1,8 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+from config import settings
 
-MONGO_URL = os.getenv("MONGO_URL", "mongodb://admin:password123@localhost:27017")
+MONGO_URL = settings.MONGODB_URL
 
 class Database:
     client: AsyncIOMotorClient = None

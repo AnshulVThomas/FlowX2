@@ -50,11 +50,15 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
     // Only runs when generation changes risk level
     useEffect(() => {
         const shouldLock = uiRender?.badge_color === 'red' || uiRender?.badge_color === 'yellow';
-        if (shouldLock && !data.locked) {
-            updateNodeData(id, { locked: true });
+        // FIX: Only auto-lock if locked state is UNDEFINED (fresh node). 
+        // If it is explicitly false (user unlocked), do NOT re-lock on mount/refresh.
+        if (shouldLock && data.locked === undefined) {
+            updateNodeData(id, { locked: true }); // No save needed here, initial state
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [uiRender?.badge_color]); // Minimal dependency
+
+
 
     // --- AUTO-TAB EFFECT ---
     useEffect(() => {
@@ -245,7 +249,8 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
     const toggleHistory = useCallback(() => { setShowHistory(p => !p); setShowSettings(false); }, []);
     const toggleTerminal = useCallback((val: boolean) => { setIsTerminalOpen(val); setIsExpanded(val); }, []);
     const handleTerminalClose = useCallback(() => { setIsTerminalOpen(false); setIsExpanded(false); }, []);
-    const updateLocked = useCallback((val: boolean) => updateNodeData(id, { locked: val }), [id, updateNodeData]);
+    // FIX: Save Immediately on Lock Toggle
+    const updateLocked = useCallback((val: boolean) => updateNodeData(id, { locked: val }, true), [id, updateNodeData]);
     const updateShowInfo = useCallback((val: boolean) => setShowInfo(val), []);
 
     // Helper for terminal connection

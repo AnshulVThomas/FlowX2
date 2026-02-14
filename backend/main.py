@@ -7,9 +7,9 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent)) 
 # Add parent directory to sys.path to find 'plugins'
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 # Load root .env
-load_dotenv(Path(__file__).parent.parent / ".env")
+# load_dotenv(Path(__file__).parent.parent / ".env")
 from contextlib import asynccontextmanager
 from typing import List, Dict
 
@@ -17,7 +17,7 @@ from typing import List, Dict
 # from plugins.CommandNode.backend.schema import GenerateCommandRequest, UIResponse, UIRender, ExecutionMetadata
 
 from app.core.session_manager import PtySession
-from engine.builder import GraphBuilder
+
 from engine.validator import validate_workflow
 from engine.registry import NodeRegistry # [NEW] Import Registry
 from langgraph.checkpoint.mongodb import MongoDBSaver

@@ -105,7 +105,8 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
 
         // 2. Pre-Flight Sudo Check
         const allNodes = useWorkflowStore.getState().nodes;
-        const requiresSudo = allNodes.some(n => n.data?.locked || n.data?.sudoLock);
+        // FIX: Only check for sudoLock, not generic locked status
+        const requiresSudo = allNodes.some(n => n.data?.sudoLock);
 
         if (requiresSudo) {
             // 3. Sweep canvas for VaultNode
@@ -117,8 +118,9 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
                 await runExecution(String(savedPassword));
             } else {
                 // No Vault or empty — fallback to manual modal
-                const lockNodes = allNodes.filter(n => n.data?.locked || n.data?.sudoLock);
-                setSudoCount(lockNodes.length);
+                // FIX: Only count nodes that explicitly need sudo
+                const sudoNodes = allNodes.filter(n => n.data?.sudoLock);
+                setSudoCount(sudoNodes.length);
                 setShowSudoModal(true);
             }
             return;

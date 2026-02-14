@@ -63,7 +63,21 @@ class CommandNode(FlowXNode):
         
         password_to_inject = sudo_password if use_sudo_lock else None
         
-        # FAIL FAST: If locked but no password, prevent hang
+        # 1. FAIL FAST: Node Lock (Safety Lock)
+        # Verify that node is not locked before proceeding. This acts as a runtime validation.
+        is_locked = self.data.get("locked", False)
+        if is_locked:
+             err_msg = "[FlowX Error] Node is intentionally LOCKED. Please unlock the node to execute."
+             if emit:
+                 await emit("node_log", {
+                    "nodeId": node_id, 
+                    "log": f"\r\n\x1b[31m{err_msg}\x1b[0m\r\n", 
+                    "type": "stderr"
+                 })
+             return {"status": "error", "stdout": err_msg, "exit_code": 126} # 126: Command invoked cannot execute
+
+        # 2. FAIL FAST: Sudo Lock (Privilege Lock)
+        # If sudoLock is enabled but no password provided, we cannot run.
         if use_sudo_lock and not password_to_inject:
              err_msg = "[FlowX Error] Node is Sudo Locked but no password provided in context. Run workflow with sudo credentials."
              if emit:
