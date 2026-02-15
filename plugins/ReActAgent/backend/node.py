@@ -4,7 +4,6 @@ import asyncio
 from typing import Dict, Any
 from engine.protocol import FlowXNode, ValidationResult
 from groq import Groq
-from .tools import TOOL_IMPLEMENTATIONS
 
 class ReActAgentNode(FlowXNode):
     def validate(self, data: Dict[str, Any]) -> ValidationResult:
@@ -35,9 +34,12 @@ class ReActAgentNode(FlowXNode):
             if output.get("type") == "TOOL_DEF":
                 tool_def = output.get("definition")
                 t_name = tool_def["name"]
-                if t_name in TOOL_IMPLEMENTATIONS:
-                    allowed_tools[t_name] = TOOL_IMPLEMENTATIONS[t_name]
+                
+                # Support "Offloaded Function" Pattern (Function explicitly provided)
+                if "implementation" in output:
+                    allowed_tools[t_name] = output["implementation"]
                     tool_definitions.append(tool_def)
+
             else:
                 # Standard Context (e.g. Command Node output)
                 context_str += f"[Node {parent_id}]: {output.get('stdout', str(output))}\n"
@@ -49,9 +51,24 @@ class ReActAgentNode(FlowXNode):
                 [f"- {t['name']}: {t['description']} (Args: {t['parameters']})" for t in tool_definitions]
             )
 
+        # 3. CONSTRUCT SYSTEM PROMPT
+        # We give the agent a "Manager" persona so it feels confident using control tools.
+        system_persona = (
+            "You are the Autonomous Execution Engine for this workflow. "
+            "Your job is to analyze the context, detect failures, and take decisive action.\n\n"
+            "AUTHORITY:\n"
+            "- You have full permission to EXECUTE commands via connected tools.\n"
+            "- You have full permission to STOP or RESTART the workflow if you detect critical errors.\n\n"
+            f"{tools_desc}\n\n"
+            "RESPONSE FORMAT (JSON ONLY):\n"
+            "{\"thought\": \"reasoning about the state\", \"action\": \"tool_name\", \"args\": \"string_arguments\"}\n"
+            "OR if done:\n"
+            "{\"thought\": \"task completed\", \"action\": \"final_answer\", \"args\": \"summary\"}"
+        )
+
         messages = [
-            {"role": "system", "content": f"You are an Agent. {tools_desc}\nRespond in JSON: {{\"thought\": \"...\", \"action\": \"tool_name\", \"args\": \"...\"}}"},
-            {"role": "user", "content": f"{context_str}\nGOAL: {self.data.get('prompt')}"}
+            {"role": "system", "content": system_persona},
+            {"role": "user", "content": f"{context_str}\nCURRENT OBJECTIVE: {self.data.get('prompt')}"}
         ]
 
         # 4. REACT LOOP (Max 5 Steps)
@@ -63,7 +80,7 @@ class ReActAgentNode(FlowXNode):
             
             try:
                 chat = await asyncio.to_thread(
-                    client.chat.completions.create, messages=messages, model="llama-3.3-70b-versatile",
+                    client.chat.completions.create, messages=messages, model=os.getenv("REACT_AGENT_MODEL", "llama-3.3-70b-versatile"),
                     temperature=0.1, response_format={"type": "json_object"}
                 )
             except Exception as e: return {"status": "failed", "output": {"error": str(e)}}
@@ -85,7 +102,21 @@ class ReActAgentNode(FlowXNode):
 
             # EXECUTE TOOL (Permission Check)
             if action in allowed_tools:
-                tool_output = allowed_tools[action](args)
+                try:
+                    tool_output = allowed_tools[action](args)
+                    
+                    # --- SIGNAL DETECTION ---
+                    if isinstance(tool_output, str) and tool_output.startswith("__FLOWX_SIGNAL__"):
+                        return {
+                            "status": "success",
+                            "output": {
+                                "response": "Control Signal Triggered",
+                                "signal": tool_output,
+                                "history": history_log
+                            }
+                        }
+                except Exception as e:
+                    tool_output = f"Execution Panic: {str(e)}"
             else:
                 tool_output = f"Error: Permission Denied. Tool '{action}' is not connected."
             

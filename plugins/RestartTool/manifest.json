@@ -1,0 +1,14 @@
+{
+    "id": "restartTool",
+    "name": "Restart Workflow",
+    "category": "Tools",
+    "description": "Restarts the workflow from the beginning.",
+    "color": "#f59e0b",
+    "backend_class": "RestartToolNode",
+    "frontend_component": "RestartToolUI",
+    "constraints": {
+        "allowed_target_types": [
+            "reactAgent"
+        ]
+    }
+}

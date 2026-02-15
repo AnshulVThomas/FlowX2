@@ -1,0 +1,14 @@
+{
+    "id": "stopTool",
+    "name": "Stop Workflow",
+    "category": "Tools",
+    "description": "Permanently stops the workflow.",
+    "color": "#ef4444",
+    "backend_class": "StopToolNode",
+    "frontend_component": "StopToolUI",
+    "constraints": {
+        "allowed_target_types": [
+            "reactAgent"
+        ]
+    }
+}

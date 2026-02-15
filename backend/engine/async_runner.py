@@ -46,6 +46,7 @@ class AsyncGraphExecutor:
         
         # 1. Check explicit data
         behavior = edge.get("data", {}).get("behavior")
+        if behavior == "force": return "always"
         if behavior in ["conditional", "failure", "always"]: return behavior
             
         # 2. Check source handle ID
@@ -55,6 +56,16 @@ class AsyncGraphExecutor:
         
         return "conditional"
 
+    def _sanitize_for_db(self, obj: Any) -> Any:
+        """Recursively converts non-serializable objects (like functions) to strings."""
+        if isinstance(obj, dict):
+            return {k: self._sanitize_for_db(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._sanitize_for_db(v) for v in obj]
+        elif callable(obj):
+            return f"<function {getattr(obj, '__name__', str(obj))}>"
+        return obj
+
     async def _update_db_status(self, node_id: str, status: str, result: Any = None):
         """Fire-and-forget DB update"""
         if not self.thread_id: return
@@ -62,7 +73,9 @@ class AsyncGraphExecutor:
             database = db.get_db()
             update_data = {f"results.{node_id}": {"status": status, "timestamp": datetime.utcnow().isoformat()}}
             if result:
-                 update_data[f"results.{node_id}"]["data"] = result if isinstance(result, (dict, list, str, int, float, bool, type(None))) else str(result)
+                 # Sanitize result to safely store functions/objects
+                 safe_result = self._sanitize_for_db(result)
+                 update_data[f"results.{node_id}"]["data"] = safe_result
             await database.runs.update_one({"thread_id": self.thread_id}, {"$set": update_data}, upsert=True)
         except Exception as e:
             print(f"DB Update Failed for {node_id}: {e}")
@@ -73,7 +86,7 @@ class AsyncGraphExecutor:
 
     async def execute(self):
         """Forward-Traversal Execution Loop."""
-        ALLOWED_TRIGGERS = {"startNode", "webhookNode", "cronNode"}
+        ALLOWED_TRIGGERS = {"startNode", "webhookNode", "cronNode", "shellTool", "stopTool", "restartTool", "readFileTool", "writeFileTool"}
         
         # 1. Identify Start Nodes (No incoming edges + Allowed Type)
         start_nodes = [
@@ -100,6 +113,23 @@ class AsyncGraphExecutor:
             for task in done:
                 node_id, result_payload, is_skip = task.result()
                 
+                # --- NEW: HANDLE CONTROL SIGNALS ---
+                if isinstance(result_payload, dict) and "output" in result_payload:
+                    output_data = result_payload["output"]
+                    
+                    # Check if the node emitted a signal (Agent or Tool)
+                    signal = output_data.get("signal") if isinstance(output_data, dict) else None
+                    if signal and isinstance(signal, str):
+                        if signal.startswith("__FLOWX_SIGNAL__STOP"):
+                            reason = signal.split(":", 1)[1] if ":" in signal else "Stopped by Agent"
+                            print(f"🛑 ENGINE STOPPED: {reason}")
+                            return {"status": "STOPPED", "results": self.results, "reason": reason}
+                        
+                        elif signal.startswith("__FLOWX_SIGNAL__RESTART"):
+                            print(f"🔄 ENGINE RESTART TRIGGERED")
+                            return {"status": "RESTART_REQUESTED", "results": self.results}
+                # -----------------------------------
+                
                 # 4. Push data to children
                 outgoing_edges = self._get_outgoing_edges(node_id)
                 for edge in outgoing_edges:
@@ -116,6 +146,7 @@ class AsyncGraphExecutor:
                         status = result_payload.get("status", "failed") if isinstance(result_payload, dict) else "failed"
                         if status == "success" and behavior != "failure": passes_edge = True
                         if status != "success" and behavior != "conditional": passes_edge = True
+
 
                     # 5. FILL THE INBOX (The Push)
                     payload_to_send = result_payload if passes_edge else SKIP_BRANCH
