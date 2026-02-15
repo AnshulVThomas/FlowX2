@@ -324,15 +324,51 @@ async def execute_workflow(workflow_data: dict, background_tasks: BackgroundTask
     # Wrapper to run execution and handle registration
     async def run_execution():
         try:
-            # Execute the graph
-            result_stats = await executor.execute()
-            
-            return {
-                "thread_id": thread_id, 
-                "status": result_stats.get("status", "COMPLETED"),
-                "logs": result_stats.get("errors", []), # Mapping errors to logs for now
-                "results": result_stats.get("results", {})
-            }
+            import os
+            loop_count = 0
+            MAX_RESTARTS = int(os.getenv("MAX_WORKFLOW_RESTARTS", 3)) # Safety Limit
+
+            while True:
+                # Execute the graph
+                result_stats = await executor.execute()
+                status = result_stats.get("status", "COMPLETED")
+                
+                # CHECK FOR RESTART SIGNAL
+                if status == "RESTART_REQUESTED":
+                    loop_count += 1
+                    if loop_count > MAX_RESTARTS:
+                        print(f"🛑 RESTART LIMIT REACHED ({MAX_RESTARTS}). Stopping.")
+                        return {
+                            "thread_id": thread_id, 
+                            "status": "FAILED",
+                            "error": "Restart Limit Reached",
+                            "results": result_stats.get("results", {})
+                        }
+                    
+                    print(f"🔄 RESTARTING WORKFLOW (Attempt {loop_count + 1})...")
+                    
+                    # Notify Frontend of Restart
+                    await emit_to_frontend("node_status", {"nodeId": "system", "status": "restarting"})
+                    
+                    # Reset Executor State (Manually re-init executor methods or just re-run execute?)
+                    # The AsyncGraphExecutor is stateful (self.results, self.node_status). 
+                    # We MUST re-instantiate it for a clean restart.
+                    executor.__init__(
+                        workflow_data, 
+                        emit_event=emit_to_frontend,
+                        thread_id=thread_id,
+                        global_context=global_context
+                    )
+                    continue # Loop again
+
+                # Normal Completion or Failure
+                return {
+                    "thread_id": thread_id, 
+                    "status": status,
+                    "logs": result_stats.get("errors", []),
+                    "results": result_stats.get("results", {})
+                }
+
         except asyncio.CancelledError:
             print(f"Workflow Execution Cancelled: {thread_id}")
             # Emit cancellation event

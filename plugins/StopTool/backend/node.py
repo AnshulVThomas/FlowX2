@@ -3,6 +3,7 @@ from engine.protocol import FlowXNode
 # --- THE FUNCTION ---
 def stop_workflow_func(reason: str = "Stopped by Agent") -> str:
     """Stops the workflow immediately."""
+    print(f"[STOP TOOL 🔴] Emitting Signal: STOP ({reason})")
     return f"__FLOWX_SIGNAL__STOP:{reason}"
 
 # --- THE SCHEMA ---

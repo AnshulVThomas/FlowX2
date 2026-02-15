@@ -3,6 +3,7 @@ from engine.protocol import FlowXNode
 # --- THE FUNCTION ---
 def restart_workflow_func(args: str = "") -> str:
     """Restarts the workflow from the beginning."""
+    print(f"[RESTART TOOL 🟠] Emitting Signal: RESTART")
     return "__FLOWX_SIGNAL__RESTART"
 
 # --- THE SCHEMA ---

@@ -55,6 +55,19 @@ Handles secure command execution.
 -   **Standard Streams**: Captures `stdout`/`stderr` in real-time.
 -   **Sudo Injection**: Monitors stream for `[sudo] password` prompts and accepts the password from the secure context if authorized.
 
+### 2.4 Control Signals & Memory (New in v5.1)
+
+**A. Control Signals (`__FLOWX_SIGNAL__`)**
+To allow Agents to control the workflow lifecycle, the engine intercepts specific string patterns in a node's output:
+-   `__FLOWX_SIGNAL__STOP:<reason>`: Immediately halts execution. Returns `STOPPED` status.
+-   `__FLOWX_SIGNAL__RESTART:<reason>`: Triggers a full workflow restart. Returns `RESTART_REQUESTED`.
+
+**B. Long-Term Memory**
+The **ReAct Agent** persists its state to the `agent_memories` MongoDB collection.
+-   **Key**: `thread_id` + `node_id`.
+-   **Value**: List of past actions and outcomes.
+-   **Usage**: On restart, the Agent reads this history to avoid repeating failed actions (infinite loop prevention).
+
 ---
 
 ## 3. Plugin System (`plugins/`)
@@ -85,6 +98,10 @@ plugins/CommandNode/
 | **CommandNode** | `CommandNode` | Executes shell commands via PTY. | `ALL` |
 | **ORMergeNode** | `ORMergeNode` | Flow control discriminator. | `ANY` |
 | **VaultNode** | `VaultNode` | Configuration for secrets (not executed). | N/A |
+| **ReActAgent** | `ReActAgentNode` | Autonomous AI Engine (Llama 3.3). | `ALL` |
+| **ShellTool** | `ShellToolNode` | Capability: Execute Commands. | `ALL` |
+| **StopTool** | `StopToolNode` | Control: Stop Workflow. | `ALL` |
+| **RestartTool** | `RestartToolNode` | Control: Restart Workflow. | `ALL` |
 
 ---
 
@@ -102,3 +119,25 @@ plugins/CommandNode/
 2.  **Init**: Backend creates `AsyncGraphExecutor` with `thread_id`.
 3.  **Stream**: Status updates (`running`, `completed`) sent via WebSocket.
 4.  **Finish**: Final state saved to MongoDB `runs` collection.
+
+---
+
+## 5. Agentic Workflows (v5.1)
+
+FlowX2 v5.1 introduces the **ReAct Agent**, a "Super-Node" capable of autonomous decision-making.
+
+### 5.1 Architecture
+The Agent is designed as a **Brain** that requires **Hands** (Tools) to function.
+-   **Brain**: `ReActAgentNode` (uses Groq/Llama 3.3).
+-   **Hands**: Specialized Tool Nodes (`ShellTool`, `StopTool`, `RestartTool`).
+-   **Connection**: Tools must be connected upstream to the Agent. The Agent dynamically detects available tools from its input memory.
+
+### 5.2 Self-Healing Capabilities
+The Agent can inspect the output of previous nodes (e.g., a failed `CommandNode`).
+-   **Decision**: It can decide to fix the issue (e.g., `run_shell('sudo systemctl restart nginx')`) and then **Restart** the workflow.
+-   **Memory**: Execution history is persisted in MongoDB (`agent_memories`). This allows the Agent to "remember" past failures across restarts.
+-   **Infinite Loop Protection**: If the Agent sees it has already tried a fix that failed, it will choose to **Stop** the workflow instead of restarting again.
+
+### 5.3 Configuration
+-   **Model**: Defaults to `llama-3.3-70b-versatile`. Configurable via `.env` (`REACT_AGENT_MODEL`).
+-   **API Key**: Requires `GROQ_API_KEY_FOR_REACT_AGENT`.
