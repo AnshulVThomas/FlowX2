@@ -39,7 +39,7 @@ const RestartToolUI = ({ data, selected }: NodeProps) => {
 
             {/* POWER SURGE: Amber Pulse for Restart */}
             {isRunning && (
-                <div className="absolute -inset-1 bg-amber-500/30 rounded-lg blur-sm animate-pulse transition-all duration-300" />
+                <div className="absolute -inset-[5px] bg-amber-500/30 rounded-lg blur-sm animate-pulse transition-all duration-300" />
             )}
 
             <div className={`

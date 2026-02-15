@@ -33,6 +33,14 @@ from routers import bridge
 async def lifespan(app: FastAPI):
     # Startup: Connect to the database
     db.connect()
+    try:
+        database = db.get_db()
+        # Create TTL index: Auto-delete memories older than 24 hours (86400 seconds)
+        # Ensure we await this as motor is async
+        await database.agent_memories.create_index("last_updated", expireAfterSeconds=86400)
+        print("✅ TTL Index verified for agent_memories")
+    except Exception as e:
+        print(f"⚠️ Failed to init TTL index: {e}")
     yield
     # Shutdown: Close the database connection
     db.close()

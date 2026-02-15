@@ -40,7 +40,7 @@ const StopToolUI = ({ data, selected }: NodeProps) => {
 
             {/* POWER SURGE: Red Pulse for Stop */}
             {isRunning && (
-                <div className="absolute -inset-1 bg-red-500/30 rounded-lg blur-sm animate-pulse transition-all duration-300" />
+                <div className="absolute -inset-[5px] bg-red-500/30 rounded-lg blur-sm animate-pulse transition-all duration-300" />
             )}
 
             <div className={`

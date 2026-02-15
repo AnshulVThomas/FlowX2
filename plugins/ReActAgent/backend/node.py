@@ -32,7 +32,10 @@ async def append_agent_memory(thread_id: str, node_id: str, entry: Dict):
         
         await database.agent_memories.update_one(
             {"thread_id": thread_id, "node_id": node_id},
-            {"$push": {"history": entry}},
+            {
+                "$push": {"history": entry},
+                "$set": {"last_updated": datetime.utcnow()} # Top-level timestamp for TTL
+            },
             upsert=True
         )
     except Exception as e:
