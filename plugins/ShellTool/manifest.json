@@ -1,0 +1,9 @@
+{
+    "id": "shellTool",
+    "name": "Shell Capability",
+    "category": "Tools",
+    "description": "Connect to AI Agent to grant shell access.",
+    "color": "#3b82f6",
+    "backend_class": "ShellToolNode",
+    "frontend_component": "ShellToolUI"
+}
