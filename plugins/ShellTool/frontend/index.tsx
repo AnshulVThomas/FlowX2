@@ -1,8 +1,17 @@
-import { memo } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { memo, useCallback } from 'react';
+import { Handle, Position, type NodeProps, useReactFlow, type Connection } from '@xyflow/react';
 import { Terminal } from 'lucide-react';
 
+const ALLOWED_TARGETS = ['reactAgent'];
+
 const ShellToolUI = ({ selected }: NodeProps) => {
+    const { getNode } = useReactFlow();
+
+    const isValidConnection = useCallback((connection: Connection) => {
+        const targetNode = getNode(connection.target);
+        return targetNode && ALLOWED_TARGETS.includes(targetNode.type || '');
+    }, [getNode]);
+
     return (
         <div className={`
             flex flex-col items-center gap-2 px-3 py-2 rounded-lg 
@@ -19,11 +28,11 @@ const ShellToolUI = ({ selected }: NodeProps) => {
                 </div>
             </div>
 
-            {/* OUTPUT HANDLE AT BOTTOM */}
-            {/* Connects to the Top of the Agent */}
+            {/* OUTPUT HANDLE - RESTRICTED */}
             <Handle
                 type="source"
                 position={Position.Bottom}
+                isValidConnection={isValidConnection}
                 className="!w-3 !h-3 !bg-blue-500 !border-2 !border-white hover:!bg-blue-400 transition-colors shadow-sm"
             />
         </div>

@@ -27,12 +27,6 @@ const ReActAgentUI = ({ id, data, selected }: NodeProps) => {
             <div className="relative flex items-center gap-4 p-4 border-b border-gray-100">
                 <div className={`relative w-10 h-10 flex items-center justify-center rounded-xl border shadow-sm transition-colors duration-300 ${selected ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-100'}`}>
                     <Bot size={20} className={`min-w-5 transition-colors duration-300 ${selected ? 'text-blue-500' : 'text-gray-500'}`} />
-                    {selected && (
-                        <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
-                        </span>
-                    )}
                 </div>
 
                 <div className="flex flex-col gap-0.5">
