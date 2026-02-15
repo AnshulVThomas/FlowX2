@@ -1,5 +1,6 @@
 from typing import Dict, Any, List
 import re
+import time
 from engine.protocol import FlowXNode, ValidationResult, RuntimeContext
 from engine.pty_runner import execute_in_pty
 
@@ -46,7 +47,15 @@ class CommandNode(FlowXNode):
         """
         command = self.data.get("command", "")
         if not command:
-            return {"status": "error", "stdout": "No command provided"}
+            return {
+                "status": "failed",
+                "output": {
+                    "command": "",
+                    "stdout": "",
+                    "stderr": "No command provided",
+                    "exit_code": 1
+                }
+            }
 
         # Extract Context (Includes Vault Node password)
         runtime_ctx = ctx.get("context", {})
@@ -74,7 +83,15 @@ class CommandNode(FlowXNode):
                     "log": f"\r\n\x1b[31m{err_msg}\x1b[0m\r\n", 
                     "type": "stderr"
                  })
-             return {"status": "error", "stdout": err_msg, "exit_code": 126} # 126: Command invoked cannot execute
+             return {
+                 "status": "failed",
+                 "output": {
+                     "command": command,
+                     "stdout": "",
+                     "stderr": err_msg,
+                     "exit_code": 126
+                 }
+             }
 
         # 2. FAIL FAST: Sudo Lock (Privilege Lock)
         # If sudoLock is enabled but no password provided, we cannot run.
@@ -86,7 +103,15 @@ class CommandNode(FlowXNode):
                     "log": f"\r\n\x1b[31m{err_msg}\x1b[0m\r\n", 
                     "type": "stderr"
                  })
-             return {"status": "error", "stdout": err_msg, "exit_code": 1}
+             return {
+                 "status": "failed",
+                 "output": {
+                     "command": command,
+                     "stdout": "",
+                     "stderr": err_msg,
+                     "exit_code": 1
+                 }
+             }
 
         # Thread-safe logging callback
         async def stream_logger(chunk: str, stream_type: str):
@@ -107,23 +132,39 @@ class CommandNode(FlowXNode):
                 })
 
             # Fire the Hybrid PTY Runner
+            start_time = time.time()
             exit_code, stdout, stderr = await execute_in_pty(
                 command=command,
                 sudo_password=password_to_inject,
                 on_output=stream_logger
             )
+            duration_ms = int((time.time() - start_time) * 1000)
 
-            status = "success" if exit_code == 0 else "error"
+            status = "success" if exit_code == 0 else "failed"
             final_output = stdout if status == "success" else (stderr or stdout)
 
+            # Strict Output Schema
             return {
                 "status": status,
-                "stdout": final_output.strip(),
-                "exit_code": exit_code
+                "output": {
+                    "command": command,
+                    "stdout": stdout.strip(),
+                    "stderr": stderr.strip() if stderr else "",
+                    "exit_code": exit_code,
+                    "duration_ms": duration_ms
+                }
             }
 
         except Exception as e:
-            return {"status": "error", "stdout": str(e)}
+            return {
+                "status": "failed",
+                "output": {
+                    "command": command,
+                    "stdout": "",
+                    "stderr": str(e),
+                    "exit_code": 1
+                }
+            }
 
     def get_execution_mode(self) -> Dict[str, bool]:
         return {
