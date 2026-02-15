@@ -29,15 +29,15 @@ This tells the engine's `_check_if_ready()` to fire the node as soon as **any** 
 
 ### Execution
 
-The `execute()` method is a pure pass-through:
-- Receives the winning branch's payload from `inputs`
-- Always returns `status: "success"` (the merge operation itself is successful)
-- Packs the winner's data inside `output` for downstream inspection
-- Records which branch won via `_merged_from`
+The `execute()` method is a **wrapper** around the winning branch:
+1.  Receives the winning branch's payload from `inputs` (engine guarantees only valid inputs arrive).
+2.  **Always returns `status: "success"`**.
+3.  Wraps the winner's data inside `output` to ensure standardized schema compliance.
+4.  Records which branch won via `_merged_from`.
 
 ### Why Always "success"?
 
-If the OR Merge inherited the winner's failed status, downstream `conditional` edges would block. The merge "cleans" the pipeline — downstream nodes see a successful parent and execute normally. The original data (including any failure info) is still accessible in `output`.
+If the OR Merge inherited the winner's failed status (e.g., from a failed command), downstream `conditional` edges would block. By forcing `success`, the merge "cleans" the pipeline so the flow continues. The original data (including `exit_code` and `stderr`) is safely nested in `output` for downstream nodes to inspect if needed.
 
 ## Example Workflow
 

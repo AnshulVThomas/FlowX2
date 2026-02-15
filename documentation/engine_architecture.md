@@ -21,6 +21,7 @@ FlowX uses a **Push-Based Async Graph Execution Engine**. The engine starts at t
 3.  **Async Executor (`backend/engine/async_runner.py`)**
     -   **Push-based forward traversal** — starts at triggers, pushes through edges.
     -   **Inbox system** — parents deposit results into child inboxes; children fire when ready.
+    -   **Skip Propagation** — Intelligent handling of skipped branches (`SKIP_BRANCH`).
     -   Manages concurrency, edge routing, logging, and WebSocket status updates.
     -   Supports crash recovery via `initial_state` re-hydration.
 
@@ -71,9 +72,9 @@ When you click "Run Workflow":
     -   Identifies trigger nodes (`startNode`, `webhookNode`, etc.).
     -   Executes triggers first.
     -   On completion, evaluates outgoing edges (`conditional`, `force`, `failure`).
-    -   Drops result into child node's inbox.
+    -   Drops result (or `SKIP_BRANCH`) into child node's inbox.
     -   Checks if child is ready (`_check_if_ready` using `wait_strategy`).
-    -   Fires ready children; repeats until no active tasks.
+    -   Fires ready children with valid inputs (skips filtered out).
 4.  **Plugin (`node.py`)**:
     -   Executes specific logic (e.g., PTY command, OR merge).
     -   Streams logs back via `emit("node_log", ...)` callback.
