@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { Handle, Position, type NodeProps, useReactFlow, type Connection } from '@xyflow/react';
+import { Handle, Position, type NodeProps, useReactFlow } from '@xyflow/react';
 import { Bot, Cpu, Sparkles } from 'lucide-react';
 
 const ReActAgentUI = ({ id, data, selected }: NodeProps) => {
@@ -15,115 +15,111 @@ const ReActAgentUI = ({ id, data, selected }: NodeProps) => {
         }));
     }, [id, setNodes]);
 
-    // --- ANIMATION STATE ---
+    // --- STATE ---
     const isRunning = data.execution_status === 'running';
     const isSuccess = data.execution_status === 'completed';
     const isError = data.execution_status === 'failed';
 
-    // Dynamic Border/Shadow Logic
-    let ringClass = selected ? 'ring-2 ring-blue-500' : 'ring-1 ring-gray-200';
-    let shadowClass = selected ? 'shadow-[0_0_30px_-5px_rgba(59,130,246,0.5)]' : 'shadow-xl shadow-black/20';
+    // --- STYLES ---
+    // We use border-2 consistently to prevent layout jumps.
+    // When running, we make the border transparent to show the gradient behind it.
+    let borderClass = 'border-gray-200';
+    let shadowClass = selected ? 'shadow-xl shadow-blue-500/20' : 'shadow-lg shadow-black/5';
 
     if (isRunning) {
-        ringClass = 'ring-1 ring-purple-500/50';
-        shadowClass = 'shadow-[0_0_40px_-5px_rgba(168,85,247,0.4)]';
+        borderClass = 'border-transparent'; // Hide border so gradient shows
+        shadowClass = 'shadow-[0_0_40px_-10px_rgba(168,85,247,0.5)]';
+    } else if (selected) {
+        borderClass = 'border-blue-500';
     } else if (isSuccess) {
-        ringClass = 'ring-2 ring-emerald-500';
-        shadowClass = 'shadow-[0_0_30px_-5px_rgba(16,185,129,0.5)]';
+        borderClass = 'border-emerald-500';
     } else if (isError) {
-        ringClass = 'ring-2 ring-rose-500';
-        shadowClass = 'shadow-[0_0_30px_-5px_rgba(244,63,94,0.5)]';
+        borderClass = 'border-rose-500';
     }
 
     return (
-        // OUTER WRAPPER: Handles the clip and shape
-        <div className="relative group rounded-2xl w-[340px] transition-all duration-300">
+        // OUTER WRAPPER: Fixed width prevents horizontal jumping
+        <div className="relative group w-[340px]">
 
-            {/* ANIMATION LAYER: The spinning gradient (Only visible when running) */}
+            {/* 1. GLOW LAYER (Only when running) */}
             {isRunning && (
-                <div className="absolute -inset-[5px] rounded-[20px] bg-gradient-to-r from-purple-500 via-indigo-500 to-purple-500 opacity-75 blur-[4px] animate-pulse transition-all duration-1000 group-hover:duration-200 z-0" />
+                <div className="absolute -inset-[4px] rounded-2xl bg-purple-500/30 blur-lg animate-pulse z-0" />
             )}
 
-            {/* Spinning Border (The clean line) */}
+            {/* 2. SPINNING BORDER GRADIENT (Match Command Node thickness) */}
             {isRunning && (
-                <div className="absolute -inset-[5px] rounded-[20px] overflow-hidden pointer-events-none z-0">
-                    <div className="absolute inset-[-100%] animate-[spin_3s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#0000_0%,#a855f7_50%,#0000_100%)]" />
+                <div className="absolute -inset-[5px] rounded-2xl overflow-hidden pointer-events-none z-0">
+                    <div className="absolute inset-[-100%] bg-[conic-gradient(from_0deg_at_50%_50%,#fdf4ff_0%,#a855f7_50%,#d946ef_100%)] animate-[spin_3s_linear_infinite]" />
                 </div>
             )}
 
-            {/* INNER CONTENT */}
+            {/* 3. MAIN CONTENT CARD (Sits on top) */}
             <div className={`
-                relative flex flex-col w-full h-full rounded-2xl transition-all duration-300 z-10
-                bg-white ${ringClass} ${shadowClass}
+                relative flex flex-col w-full rounded-2xl overflow-hidden z-10 transition-all duration-300
+                bg-white border-2 ${borderClass} ${shadowClass}
             `}>
                 {/* Header */}
-                <div className="relative flex items-center gap-4 p-4 border-b border-gray-100">
-                    <div className={`relative w-10 h-10 flex items-center justify-center rounded-xl border shadow-sm transition-colors duration-300 ${isRunning ? 'bg-purple-50 border-purple-200' : selected ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-100'}`}>
-                        <Bot size={20} className={`min-w-5 transition-colors duration-300 ${isRunning ? 'text-purple-500 animate-pulse' : selected ? 'text-blue-500' : 'text-gray-500'}`} />
+                <div className="flex items-center gap-4 p-4 border-b border-gray-100 bg-white">
+                    <div className={`
+                        flex items-center justify-center w-10 h-10 rounded-xl border shadow-sm transition-colors duration-300
+                        ${isRunning ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-100'}
+                    `}>
+                        <Bot size={20} className={isRunning ? 'text-purple-500 animate-pulse' : 'text-gray-500'} />
                     </div>
 
-                    <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-2">
-                            <span className="text-[13px] font-bold text-gray-900 tracking-wide">
-                                ReAct Agent
+                    <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                        <span className="text-[13px] font-bold text-gray-900 tracking-wide truncate">
+                            ReAct Agent
+                        </span>
+
+                        {/* Status Badge */}
+                        <div className={`
+                            flex items-center gap-1.5 px-2 py-0.5 rounded-full w-fit border transition-colors duration-300
+                            ${isRunning ? 'bg-purple-50 border-purple-100' : 'bg-blue-50 border-blue-100'}
+                        `}>
+                            <Sparkles size={8} className={isRunning ? 'text-purple-500' : 'text-blue-500'} />
+                            <span className={`text-[9px] font-bold uppercase tracking-wider truncate ${isRunning ? 'text-purple-600' : 'text-blue-600'}`}>
+                                {isRunning ? 'THINKING...' : 'AI CORE'}
                             </span>
-                            <div className={`flex items-center justify-center gap-1 w-[100px] px-1.5 py-0.5 rounded-full border ${isRunning ? 'bg-purple-50 border-purple-100' : 'bg-blue-50 border-blue-100'}`}>
-                                <Sparkles size={8} className={isRunning ? 'text-purple-500' : 'text-blue-500'} />
-                                <span className={`text-[9px] font-bold uppercase tracking-wider ${isRunning ? 'text-purple-600' : 'text-blue-600'} truncate`}>
-                                    {isRunning ? 'THINKING...' : 'AI CORE'}
-                                </span>
-                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Prompt Input Area */}
-                <div className="relative p-4 flex flex-col gap-3">
-                    <div className="flex justify-between items-end px-1">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
-                            <Cpu size={10} />
+                {/* Prompt Input */}
+                <div className="p-4 flex flex-col gap-2 bg-slate-50/50">
+                    <div className="flex items-center gap-1.5 px-1">
+                        <Cpu size={10} className="text-gray-400" />
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                             Mission Directive
-                        </label>
+                        </span>
                     </div>
 
-                    <div className="relative group/input">
-                        <textarea
-                            className="relative w-full bg-gray-50 text-gray-800 text-xs p-3 rounded-xl border border-gray-200
-                            focus:border-blue-500 focus:bg-white focus:ring-1 focus:ring-blue-500/20 outline-none
-                            resize-none h-[120px] font-mono leading-relaxed placeholder:text-gray-400 transition-all duration-300 shadow-sm"
-                            placeholder="// Enter your instruction for the agent..."
-                            defaultValue={data.prompt as string}
-                            onChange={handleChange}
-                            spellCheck={false}
-                        />
-                    </div>
+                    <textarea
+                        className="w-full bg-white text-gray-800 text-xs p-3 rounded-xl border border-gray-200
+                        focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 outline-none
+                        resize-none h-[100px] font-mono placeholder:text-gray-400 shadow-sm"
+                        placeholder="// Enter instruction..."
+                        defaultValue={data.prompt as string}
+                        onChange={handleChange}
+                        spellCheck={false}
+                    />
                 </div>
 
-                {/* Status Bar */}
-                <div className="relative px-4 pb-4 pt-0">
-                    <div className={`flex items-center justify-between px-3 py-2 rounded-lg border transition-colors duration-300 ${isRunning ? 'bg-purple-50 border-purple-100' :
-                        isSuccess ? 'bg-emerald-50 border-emerald-100' :
-                            isError ? 'bg-rose-50 border-rose-100' :
-                                'bg-gray-50 border-gray-100'
-                        }`}>
-                        <div className="flex items-center gap-2">
-                            <div className={`w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-purple-500 animate-pulse' :
-                                isSuccess ? 'bg-emerald-500' :
-                                    isError ? 'bg-rose-500' :
-                                        selected ? 'bg-blue-500' : 'bg-gray-400'
-                                }`} />
-                            <span className={`text-[10px] font-medium ${isRunning ? 'text-purple-600' :
-                                isSuccess ? 'text-emerald-600' :
-                                    isError ? 'text-rose-600' :
-                                        'text-gray-500'
-                                }`}>
-                                {isRunning ? 'Processing workflow...' :
-                                    isSuccess ? 'Mission Accomplished' :
-                                        isError ? 'Mission Failed' :
-                                            'Waiting for input...'}
+                {/* Status Footer */}
+                <div className="px-4 pb-4 pt-2 bg-slate-50/50 rounded-b-2xl">
+                    <div className={`
+                        flex items-center justify-between px-3 py-2 rounded-lg border bg-white transition-colors duration-300
+                        ${isRunning ? 'border-purple-200' : isSuccess ? 'border-emerald-200' : isError ? 'border-rose-200' : 'border-gray-200'}
+                    `}>
+                        <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isRunning ? 'bg-purple-500 animate-pulse' : isSuccess ? 'bg-emerald-500' : isError ? 'bg-rose-500' : 'bg-gray-400'}`} />
+
+                            {/* TRUNCATE PREVENTS JUMPING */}
+                            <span className={`text-[10px] font-medium truncate ${isRunning ? 'text-purple-600' : isSuccess ? 'text-emerald-600' : isError ? 'text-rose-600' : 'text-gray-500'}`}>
+                                {isRunning ? 'Running logic cycles...' : isSuccess ? 'Task Completed' : isError ? 'Execution Failed' : 'System Ready'}
                             </span>
                         </div>
-                        <code className="text-[9px] text-gray-400 font-mono">Llama-3.3-70b</code>
+                        <code className="text-[9px] text-gray-400 font-mono flex-shrink-0">Llama-3.3</code>
                     </div>
                 </div>
 

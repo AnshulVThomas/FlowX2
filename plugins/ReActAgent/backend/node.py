@@ -55,6 +55,12 @@ class ReActAgentNode(FlowXNode):
         
         print(f"[AGENT 🧠] Starting Execution. Thread: {thread_id}, Node: {node_id}")
 
+        # DEBUG: 5s Wait to observe animations without LLM call
+        print("[AGENT 🛠️] DEBUG MODE: Waiting 5 seconds...")
+        if emit: await emit("node_log", {"nodeId": node_id, "log": "🛠️ DEBUG: Simulation thinking for 5s...\n", "type": "stdout"})
+        await asyncio.sleep(5)
+        return {"status": "success", "output": {"response": "DEBUG: Thinking complete.", "history": []}} 
+
         # 1. SETUP CLIENT
         api_key = os.getenv("GROQ_API_KEY_FOR_REACT_AGENT") 
         if not api_key: return {"status": "failed", "output": {"error": "Missing GROQ_API_KEY_FOR_REACT_AGENT"}}

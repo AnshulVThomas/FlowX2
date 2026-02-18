@@ -22,7 +22,7 @@ const RestartToolUI = ({ data, selected }: NodeProps) => {
     let iconColor = 'text-amber-500';
 
     if (isRunning) {
-        borderClass = 'border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.5)]';
+        borderClass = 'border-transparent shadow-[0_0_15px_rgba(251,191,36,0.5)]';
         iconBg = 'bg-amber-100';
     } else if (isSuccess) {
         borderClass = 'border-amber-600 shadow-sm';
@@ -35,38 +35,45 @@ const RestartToolUI = ({ data, selected }: NodeProps) => {
     }
 
     return (
-        <div className="relative group">
+        <div className="relative group w-[140px]">
 
-            {/* POWER SURGE: Amber Pulse for Restart */}
+            {/* 1. POWER SURGE GLOW (Only when running) */}
             {isRunning && (
-                <div className="absolute -inset-[5px] bg-amber-500/30 rounded-lg blur-sm animate-pulse transition-all duration-300" />
+                <div className="absolute -inset-[4px] bg-amber-500/20 rounded-xl blur-md animate-pulse z-0" />
+            )}
+
+            {/* 2. SPINNING GRADIENT (Match Command Node thickness) */}
+            {isRunning && (
+                <div className="absolute -inset-[5px] rounded-xl overflow-hidden pointer-events-none z-0">
+                    <div className="absolute inset-[-100%] bg-[conic-gradient(from_0deg_at_50%_50%,#fffbeb_0%,#f59e0b_50%,#fbbf24_100%)] animate-[spin_3s_linear_infinite]" />
+                </div>
             )}
 
             <div className={`
-                relative flex flex-col items-center gap-2 px-3 py-2 rounded-lg 
+                relative flex flex-col items-center gap-2 px-3 py-2 rounded-xl 
                 bg-white border-2 transition-all duration-300 z-10
                 ${borderClass}
             `}>
-                {/* Icon & Label Group */}
-                <div className="flex items-center gap-2">
-                    <div className={`p-1.5 rounded-md transition-colors ${iconBg}`}>
-                        <RotateCcw size={16} className={`transition-colors ${iconColor}`} />
+                <div className="flex items-center gap-2 w-full min-w-0">
+                    <div className={`p-1.5 rounded-md transition-colors flex-shrink-0 ${iconBg}`}>
+                        <RotateCcw size={14} className={`transition-colors ${iconColor}`} />
                     </div>
-                    <div className="flex flex-col">
-                        <span className="text-xs font-bold text-slate-700">Restart Tool</span>
-                        <span className="text-[10px] text-slate-400">
-                            {isRunning ? 'Rebooting...' : 'Control'}
+                    <div className="flex flex-col min-w-0 flex-1">
+                        <span className="text-[11px] font-bold text-slate-700 truncate">Restart Tool</span>
+                        <span className="text-[9px] text-slate-400 truncate">
+                            {isRunning ? 'Restarting...' : 'Control'}
                         </span>
                     </div>
                 </div>
 
+                {/* OUTPUT HANDLE - RESTRICTED */}
                 <Handle
                     type="source"
                     position={Position.Bottom}
+                    isValidConnection={isValidConnection}
                     className={`!w-3 !h-3 !border-2 !border-white transition-all shadow-sm
                         ${isRunning ? '!bg-amber-400 animate-pulse' : '!bg-amber-500 hover:!bg-amber-400'}
                     `}
-                    isValidConnection={isValidConnection}
                 />
             </div>
         </div>
