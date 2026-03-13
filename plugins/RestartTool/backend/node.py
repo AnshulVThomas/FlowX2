@@ -10,7 +10,11 @@ def restart_workflow_func(args: str = "") -> str:
 SCHEMA = {
     "name": "restart_workflow",
     "description": "Restarts the entire workflow. Use to retry after a temporary failure or state fix.",
-    "parameters": "ignore (string)"
+    "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+    }
 }
 
 class RestartToolNode(FlowXNode):

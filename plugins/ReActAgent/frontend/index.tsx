@@ -1,19 +1,26 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useState, useEffect } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow } from '@xyflow/react';
 import { Bot, Cpu, Sparkles } from 'lucide-react';
 
 const ReActAgentUI = ({ id, data, selected }: NodeProps) => {
     const { setNodes } = useReactFlow();
 
-    const handleChange = useCallback((evt: React.ChangeEvent<HTMLTextAreaElement>) => {
-        const val = evt.target.value;
+    // Local state for debounced textarea sync
+    const [localPrompt, setLocalPrompt] = useState(data.prompt as string || '');
+
+    // Sync external changes (undo/redo, collaborative edits) into local state
+    useEffect(() => {
+        setLocalPrompt(data.prompt as string || '');
+    }, [data.prompt]);
+
+    const handleBlur = useCallback(() => {
         setNodes((nodes) => nodes.map((node) => {
             if (node.id === id) {
-                return { ...node, data: { ...node.data, prompt: val } };
+                return { ...node, data: { ...node.data, prompt: localPrompt } };
             }
             return node;
         }));
-    }, [id, setNodes]);
+    }, [id, localPrompt, setNodes]);
 
     // --- STATE ---
     const isRunning = data.execution_status === 'running';
@@ -99,8 +106,9 @@ const ReActAgentUI = ({ id, data, selected }: NodeProps) => {
                         focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 outline-none
                         resize-none h-[100px] font-mono placeholder:text-gray-400 shadow-sm"
                         placeholder="// Enter instruction..."
-                        defaultValue={data.prompt as string}
-                        onChange={handleChange}
+                        value={localPrompt}
+                        onChange={(e) => setLocalPrompt(e.target.value)}
+                        onBlur={handleBlur}
                         spellCheck={false}
                     />
                 </div>

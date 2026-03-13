@@ -1,11 +1,30 @@
 import json
+import re
 import os
 import asyncio
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from engine.protocol import FlowXNode, ValidationResult
 from groq import Groq
 from database.connection import db
+
+
+# --- JSON EXTRACTION HELPER ---
+def extract_json(text: str) -> Optional[dict]:
+    """Extract JSON from LLM output that may contain markdown/prose."""
+    # Fast path: already clean JSON
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Regex fallback: find outermost { ... }
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            pass
+    return None
 
 # --- MEMORY HELPERS ---
 async def fetch_agent_memory(thread_id: str, node_id: str, limit: int = 5) -> List[Dict]:
@@ -33,7 +52,7 @@ async def append_agent_memory(thread_id: str, node_id: str, entry: Dict):
         await database.agent_memories.update_one(
             {"thread_id": thread_id, "node_id": node_id},
             {
-                "$push": {"history": entry},
+                "$push": {"history": {"$each": [entry], "$slice": -20}},
                 "$set": {"last_updated": datetime.utcnow()} # Top-level timestamp for TTL
             },
             upsert=True
@@ -55,11 +74,12 @@ class ReActAgentNode(FlowXNode):
         
         print(f"[AGENT 🧠] Starting Execution. Thread: {thread_id}, Node: {node_id}")
 
-        # DEBUG: 5s Wait to observe animations without LLM call
-        print("[AGENT 🛠️] DEBUG MODE: Waiting 5 seconds...")
-        if emit: await emit("node_log", {"nodeId": node_id, "log": "🛠️ DEBUG: Simulation thinking for 5s...\n", "type": "stdout"})
-        await asyncio.sleep(5)
-        return {"status": "success", "output": {"response": "DEBUG: Thinking complete.", "history": []}} 
+        # DEBUG: 5s Wait to observe animations without LLM call (dev mode only)
+        if os.getenv("FLOWX_MODE") == "dev":
+            print("[AGENT 🛠️] DEBUG MODE: Waiting 5 seconds...")
+            if emit: await emit("node_log", {"nodeId": node_id, "log": "🛠️ DEBUG: Simulation thinking for 5s...\n", "type": "stdout"})
+            await asyncio.sleep(5)
+            return {"status": "success", "output": {"response": "DEBUG: Thinking complete.", "history": []}}
 
         # 1. SETUP CLIENT
         api_key = os.getenv("GROQ_API_KEY_FOR_REACT_AGENT") 
@@ -124,9 +144,9 @@ class ReActAgentNode(FlowXNode):
             "- You have full permission to EXECUTE commands via connected tools.\n"
             "- You have full permission to STOP or RESTART the workflow if you detect critical errors.\n\n"
             "RESPONSE FORMAT (JSON ONLY):\n"
-            "{\"thought\": \"reasoning about the state\", \"action\": \"tool_name\", \"args\": \"string_arguments\"}\n"
+            "{\"thought\": \"reasoning about the state\", \"action\": \"tool_name\", \"args\": {\"param1\": \"value\"}}\n"
             "OR if done:\n"
-            "{\"thought\": \"task completed\", \"action\": \"final_answer\", \"args\": \"summary\"}"
+            "{\"thought\": \"task completed\", \"action\": \"final_answer\", \"args\": {\"summary\": \"final result\"}}"
         )
 
         messages = [
@@ -144,8 +164,15 @@ class ReActAgentNode(FlowXNode):
         
         print(f"[AGENT 🧠] Entering Loop (Max {os.getenv('REACT_AGENT_MAX_STEPS', 5)} steps)...")
 
+        ctx_window = int(os.getenv("REACT_AGENT_CTX_WINDOW", 6))  # Max conversation pairs to keep
+
         for i in range(int(os.getenv("REACT_AGENT_MAX_STEPS", 5))):
             if emit: await emit("node_log", {"nodeId": node_id, "log": f"\n🤖 [Step {i+1}] Thinking...\n", "type": "stdout"})
+
+            # SLIDING WINDOW: Trim messages to prevent context overflow
+            # Always preserve system prompt (index 0) + last N pairs
+            if len(messages) > (1 + ctx_window * 2):
+                messages = [messages[0]] + messages[-(ctx_window * 2):]
             
             try:
                 chat = await asyncio.to_thread(
@@ -157,27 +184,27 @@ class ReActAgentNode(FlowXNode):
                 return {"status": "failed", "output": {"error": str(e)}}
 
             llm_raw = chat.choices[0].message.content
-            # print(f"[AGENT 💭] Raw LLM: {llm_raw}") # Too verbose? Maybe useful for deep debug.
             messages.append({"role": "assistant", "content": llm_raw})
             
-            try:
-                decision = json.loads(llm_raw)
-                action = decision.get("action")
-                args = decision.get("args")
-                thought = decision.get("thought")
-                print(f"[AGENT 🤔] Thought: {thought}")
-                print(f"[AGENT ⚡] Action: {action} ({args})")
-
-                if action != "final_answer":
-                    run_summary_action = f"{action}({str(args)[:50]})" # Capture main action
-
-                if emit: await emit("node_log", {"nodeId": self.data.get("id"), "log": f"🤔 {thought}\n⚡ {action}('{args}')\n", "type": "stdout"})
-            except: 
-                print(f"[AGENT ⚠️] Failed to parse JSON: {llm_raw}")
+            decision = extract_json(llm_raw)
+            if decision is None:
+                print(f"[AGENT ⚠️] Failed to extract JSON from LLM output: {llm_raw[:200]}")
+                messages.append({"role": "user", "content": "Error: Your response was not valid JSON. Respond with ONLY a JSON object."})
                 continue
 
+            action = decision.get("action")
+            args = decision.get("args")
+            thought = decision.get("thought")
+            print(f"[AGENT 🤔] Thought: {thought}")
+            print(f"[AGENT ⚡] Action: {action} ({args})")
+
+            if action != "final_answer":
+                run_summary_action = f"{action}({str(args)[:50]})" # Capture main action
+
+            if emit: await emit("node_log", {"nodeId": self.data.get("id"), "log": f"🤔 {thought}\n⚡ {action}('{args}')\n", "type": "stdout"})
+
             if action == "final_answer":
-                final_response = args
+                final_response = args.get("summary", str(args)) if isinstance(args, dict) else args
                 run_outcome = "success"
                 print(f"[AGENT ✅] Final Answer Reached.")
                 break
@@ -185,7 +212,19 @@ class ReActAgentNode(FlowXNode):
             # EXECUTE TOOL (Permission Check)
             if action in allowed_tools:
                 try:
-                    tool_output = await allowed_tools[action](args) if asyncio.iscoroutinefunction(allowed_tools[action]) else allowed_tools[action](args)
+                    # Determine if we pass as kwargs or a single positional arg
+                    if isinstance(args, dict):
+                        tool_output = await asyncio.wait_for(
+                            allowed_tools[action](**args) if asyncio.iscoroutinefunction(allowed_tools[action])
+                            else asyncio.to_thread(allowed_tools[action], **args),
+                            timeout=30
+                        )
+                    else:
+                        tool_output = await asyncio.wait_for(
+                            allowed_tools[action](args) if asyncio.iscoroutinefunction(allowed_tools[action])
+                            else asyncio.to_thread(allowed_tools[action], args),
+                            timeout=30
+                        )
                     
                     # --- SIGNAL DETECTION ---
                     if isinstance(tool_output, str) and tool_output.startswith("__FLOWX_SIGNAL__"):
@@ -205,6 +244,9 @@ class ReActAgentNode(FlowXNode):
                                 "history": history_log
                             }
                         }
+                except asyncio.TimeoutError:
+                    tool_output = "Error: Tool execution timed out after 30 seconds."
+                    print(f"[AGENT ⏱️] Tool '{action}' timed out.")
                 except Exception as e:
                     tool_output = f"Execution Panic: {str(e)}"
                     print(f"[AGENT 🔴] Tool Execution Panic: {e}")
@@ -212,9 +254,10 @@ class ReActAgentNode(FlowXNode):
                 tool_output = f"Error: Permission Denied. Tool '{action}' is not connected."
                 print(f"[AGENT 🚫] Denied Action: {action}")
             
-            if emit: await emit("node_log", {"nodeId": self.data.get("id"), "log": f"   -> {tool_output[:100]}...\n", "type": "stdout"})
-            messages.append({"role": "user", "content": f"Tool Output: {tool_output}"})
-            history_log.append({"step": i+1, "type": "observation", "content": tool_output})
+            tool_output_str = str(tool_output)
+            if emit: await emit("node_log", {"nodeId": self.data.get("id"), "log": f"   -> {tool_output_str[:100]}...\n", "type": "stdout"})
+            messages.append({"role": "user", "content": f"Tool Output: {tool_output_str}"})
+            history_log.append({"step": i+1, "type": "observation", "content": tool_output_str})
 
         # 6. SAVE MEMORY (Standard Completion)
         print(f"[AGENT 💾] Saving Memory: {run_summary_action} -> {run_outcome}")

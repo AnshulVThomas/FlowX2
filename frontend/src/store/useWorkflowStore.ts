@@ -14,6 +14,15 @@ import type { Workflow, WorkflowSummary } from '../types';
 import { fetchWorkflowDetails, deleteWorkflow as apiDeleteWorkflow, saveWorkflow as apiSaveWorkflow, validateWorkflow, executeWorkflow, cancelWorkflow } from '../services/api';
 import { loadPlugins } from '../registry/pluginLoader';
 
+export class SudoRequiredError extends Error {
+    public count: number;
+    constructor(count: number) {
+        super('SUDO_REQUIRED');
+        this.name = 'SudoRequiredError';
+        this.count = count;
+    }
+}
+
 // Plugin-driven singleton types (only nodes whose manifest has "singleton": true)
 const { singletonTypes } = loadPlugins();
 
@@ -363,6 +372,20 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
     executeGraph: async (sudoPassword?: string) => {
         const { activeId, nodes, edges } = get();
+
+        // --- NEW: SUDO VALIDATION ---
+        const sudoNodes = nodes.filter(n => n.data?.sudoLock);
+        if (sudoNodes.length > 0 && !sudoPassword) {
+            const vaultNode = nodes.find(n => n.type === 'vaultNode');
+            const savedPassword = vaultNode?.data?.sudoPassword;
+
+            if (savedPassword && String(savedPassword).trim() !== '') {
+                sudoPassword = String(savedPassword);
+            } else {
+                // Throw specific error to trigger modal in UI
+                throw new SudoRequiredError(sudoNodes.length);
+            }
+        }
 
         // 1. Validate first? Or assume component did it?
         // Let's assume user handled validation.

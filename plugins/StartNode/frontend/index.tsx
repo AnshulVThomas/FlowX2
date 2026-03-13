@@ -6,6 +6,7 @@ import { useWorkflowStore } from '@core/store/useWorkflowStore';
 import { ValidationShield } from '@core/components/ValidationShield';
 import { SudoModal } from '@core/components/SudoModal';
 import { toast } from 'sonner';
+import { SudoRequiredError } from '@core/store/useWorkflowStore';
 
 export type StartNodeData = Node<{
     name: string;
@@ -77,7 +78,8 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
     const validationStatus = useWorkflowStore((state) => state.validationStatus[id]);
     const validationErrors = useWorkflowStore((state) => state.validationErrors?.[id]);
 
-    const [isValidating, setIsValidating] = useState(false);
+    // Derived from global websocket status, removes local state desync risk
+    const isStarting = data.status === 'starting' || data.status === 'running' || data.status === 'attention_required';
 
     // Sudo State
     const [showSudoModal, setShowSudoModal] = useState(false);
@@ -85,23 +87,18 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
 
     // --- EXECUTION LOGIC ---
     const runExecution = useCallback(async (password?: string) => {
-        setIsValidating(true);
         try {
             await saveActiveWorkflow();
             await validateGraph();
-
-            // Execute with optional password
-            await executeGraph(password);
-
-            toast.success('Execution Started');
-        } catch (error) {
-            console.error(error);
-            toast.error('Execution failed');
-            setIsValidating(false);
-        } finally {
-            // If execution is async (fire & forget), we stop validating immediately. 
-            // If it awaits, we stop after. 'executeGraph' awaits the basic fetch response, not full run.
-            setIsValidating(false);
+            await executeGraph(password); // Engine state takes over via WS
+        } catch (error: any) {
+            if (error instanceof SudoRequiredError) {
+                setSudoCount(error.count);
+                setShowSudoModal(true);
+            } else {
+                console.error(error);
+                toast.error('Execution failed');
+            }
         }
     }, [saveActiveWorkflow, validateGraph, executeGraph]);
 
@@ -109,40 +106,14 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
     const handleRunClick = useCallback(async (e: React.MouseEvent) => {
         e.stopPropagation();
 
-        // 1. If running, Abort
-        if (isValidating) {
+        if (isStarting) {
             toast.info('Requesting Cancellation...');
             await abortWorkflow();
             return;
         }
 
-        // 2. Pre-Flight Sudo Check
-        const allNodes = useWorkflowStore.getState().nodes;
-        // FIX: Only check for sudoLock, not generic locked status
-        const requiresSudo = allNodes.some(n => n.data?.sudoLock);
-
-        if (requiresSudo) {
-            // 3. Sweep canvas for VaultNode
-            const vaultNode = allNodes.find(n => n.type === 'vaultNode');
-            const savedPassword = vaultNode?.data?.sudoPassword;
-
-            if (savedPassword && String(savedPassword).trim() !== '') {
-                // Vault found and populated — run silently, bypass modal
-                await runExecution(String(savedPassword));
-            } else {
-                // No Vault or empty — fallback to manual modal
-                // FIX: Only count nodes that explicitly need sudo
-                const sudoNodes = allNodes.filter(n => n.data?.sudoLock);
-                setSudoCount(sudoNodes.length);
-                setShowSudoModal(true);
-            }
-            return;
-        }
-
-        // 4. Normal Execution (no sudo needed)
         await runExecution();
-
-    }, [isValidating, abortWorkflow, runExecution]);
+    }, [isStarting, abortWorkflow, runExecution]);
 
     const handleSudoConfirm = useCallback(async (password: string) => {
         setShowSudoModal(false); // Fix: Close modal immediately
@@ -174,13 +145,13 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
                     className={`
                         group rounded-full w-10 h-10 flex justify-center items-center 
                         border shadow-sm shrink-0 cursor-pointer transition-all duration-300
-                        ${isValidating
+                        ${isStarting
                             ? 'bg-red-50 border-red-100 hover:bg-red-500' // Red for cancel
                             : 'bg-blue-50 border-blue-100 hover:bg-blue-500' // Blue for run
                         }
                     `}
                 >
-                    {isValidating ? (
+                    {isStarting ? (
                         <Square
                             size={16}
                             className="text-red-500 fill-red-500/20 group-hover:text-white group-hover:fill-white"
@@ -197,8 +168,8 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
                     <span className="text-sm font-bold text-gray-800 leading-tight">
                         {data.name || 'Start'}
                     </span>
-                    <span className={`text-xs font-bold tracking-wide uppercase mt-0.5 ${isValidating ? 'text-amber-500' : styles.textClass}`}>
-                        {isValidating ? 'STARTING...' : (data.status || 'IDLE')}
+                    <span className={`text-xs font-bold tracking-wide uppercase mt-0.5 ${isStarting ? 'text-amber-500' : styles.textClass}`}>
+                        {isStarting ? 'STARTING...' : (data.status || 'IDLE')}
                     </span>
                 </div>
 
