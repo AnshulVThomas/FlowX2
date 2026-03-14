@@ -35,14 +35,23 @@ async def lifespan(app: FastAPI):
     db.connect()
     try:
         database = db.get_db()
-        # Create TTL index: Auto-delete memories older than 24 hours (86400 seconds)
-        # Ensure we await this as motor is async
         await database.agent_memories.create_index("last_updated", expireAfterSeconds=86400)
         print("✅ TTL Index verified for agent_memories")
     except Exception as e:
         print(f"⚠️ Failed to init TTL index: {e}")
+        
+    from engine.watcher import file_watch_manager
+    file_watch_manager.start()
+    
     yield
-    # Shutdown: Close the database connection
+    # Shutdown: Cancel all active workflow tasks first so pending futures are cancelled
+    print("🛑 Shutting down: cancelling active workflow executions...")
+    for task in list(active_executions.values()):
+        task.cancel()
+    if active_executions:
+        await asyncio.gather(*active_executions.values(), return_exceptions=True)
+    
+    file_watch_manager.shutdown()
     db.close()
 
 app = FastAPI(lifespan=lifespan)

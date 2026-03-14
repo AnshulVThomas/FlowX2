@@ -1,0 +1,9 @@
+{
+    "id": "fileChangeDetector",
+    "name": "Wait For File Change",
+    "category": "System",
+    "description": "Suspends workflow execution until a file system event (creation, modification, or deletion) occurs in the specified directory.",
+    "color": "#f59e0b",
+    "backend_class": "FileChangeDetectorNode",
+    "frontend_component": "FileChangeDetectorUI"
+}

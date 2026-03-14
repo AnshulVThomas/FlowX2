@@ -102,6 +102,7 @@ plugins/CommandNode/
 | **ShellTool** | `ShellToolNode` | Capability: Execute Commands. | `ALL` |
 | **StopTool** | `StopToolNode` | Control: Stop Workflow. | `ALL` |
 | **RestartTool** | `RestartToolNode` | Control: Restart Workflow. | `ALL` |
+| **FileChangeDetector** | `FileChangeDetectorNode` | File System: Pauses execution until a file event occurs async. | `ALL` |
 
 ---
 
