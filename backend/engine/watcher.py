@@ -21,13 +21,20 @@ class _FlowXEventHandler(FileSystemEventHandler):
             return
         
         # Determine the watched path this event belongs to.
-        # For moved events, we care about the destination path if it exists
+        # For moved events (atomic writes), extract dest_path THEN remap to 'modified'
         if event_type == 'moved' and hasattr(event, 'dest_path'):
             event_path = Path(event.dest_path).resolve()
-            logger.debug(f"[Watchdog] Intercepted move to {event_path}")
+            event_type = 'modified'  # remap so the 'modified' checkbox catches it
+            logger.debug(f"[Watchdog] Intercepted atomic move to {event_path} (remapped -> modified)")
         else:
             event_path = Path(event.src_path).resolve()
             logger.debug(f"[Watchdog] Caught {event_type} on {event_path}")
+        
+        # Normalize: editors that write temp files outside the watched dir surface atomic
+        # renames as 'created' instead of 'moved'. Treat as 'modified' if file now exists.
+        if event_type == 'created' and event_path.exists():
+            event_type = 'modified'
+            logger.debug(f"[Watchdog] Normalized 'created' -> 'modified' (file exists, likely atomic write)")
         
         with self.manager._lock:
             for watched_path_str, data in self.manager.active_watches.items():
@@ -86,8 +93,8 @@ class _FlowXEventHandler(FileSystemEventHandler):
         self._handle_event(event, 'deleted')
         
     def on_moved(self, event):
-        # We treat moved as 'modified' since atomic writes use move
-        self._handle_event(event, 'modified')
+        # Pass 'moved' so the handler knows to extract dest_path before remapping
+        self._handle_event(event, 'moved')
 
 
 class FileWatchManager:
