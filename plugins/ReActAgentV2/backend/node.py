@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from engine.protocol import FlowXNode, ValidationResult
-from groq import Groq
+from google import genai
 from database.connection import db
 
 
@@ -82,9 +82,9 @@ class ReActAgentNodeV2(FlowXNode):
             return {"status": "success", "output": {"response": "DEBUG: Thinking complete.", "history": []}}
 
         # 1. SETUP CLIENT
-        api_key = os.getenv("GROQ_API_KEY_FOR_REACT_AGENT") 
-        if not api_key: return {"status": "failed", "output": {"error": "Missing GROQ_API_KEY_FOR_REACT_AGENT"}}
-        client = Groq(api_key=api_key)
+        api_key = os.getenv("GEMINI_API_KEY") 
+        if not api_key: return {"status": "failed", "output": {"error": "Missing GEMINI_API_KEY"}}
+        client = genai.Client(api_key=api_key)
 
         # 2. LOAD LONG-TERM MEMORY (The "Brain" Restore)
         past_memories = await fetch_agent_memory(thread_id, node_id)
@@ -175,15 +175,21 @@ class ReActAgentNodeV2(FlowXNode):
                 messages = [messages[0]] + messages[-(ctx_window * 2):]
             
             try:
+                prompt_text = ""
+                for msg in messages:
+                    prompt_text += f"{msg['role'].upper()}:\n{msg['content']}\n\n"
+                    
                 chat = await asyncio.to_thread(
-                    client.chat.completions.create, messages=messages, model=os.getenv("REACT_AGENT_MODEL", "llama-3.3-70b-versatile"),
-                    temperature=0.1, response_format={"type": "json_object"}
+                    client.models.generate_content,
+                    model=os.getenv("GOOGLE_MODEL", "gemini-2.5-flash"),
+                    contents=prompt_text,
+                    config={"temperature": 0.1, "response_mime_type": "application/json"}
                 )
             except Exception as e: 
                 print(f"[AGENT 🔴] LLM Error: {e}")
                 return {"status": "failed", "output": {"error": str(e)}}
 
-            llm_raw = chat.choices[0].message.content
+            llm_raw = chat.text
             messages.append({"role": "assistant", "content": llm_raw})
             
             decision = extract_json(llm_raw)
