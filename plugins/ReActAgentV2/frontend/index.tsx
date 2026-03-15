@@ -51,28 +51,30 @@ const ReActAgentUIV2 = ({ id, data, selected }: NodeProps) => {
 
     if (isRunning) {
         borderClass = 'border-transparent';
-        shadowClass = 'shadow-[0_0_40px_-10px_rgba(168,85,247,0.5)]';
+        shadowClass = 'shadow-[0_0_40px_-10px_rgba(234,179,8,0.5)]';
     } else if (isRestarting) {
         borderClass = 'border-amber-500';
         shadowClass = 'shadow-[0_0_30px_-10px_rgba(245,158,11,0.5)]';
     } else if (isStopped) {
         borderClass = 'border-red-500';
         shadowClass = 'shadow-[0_0_30px_-10px_rgba(239,68,68,0.4)]';
+    } else if (isError) {
+        borderClass = 'border-red-500';
+        shadowClass = selected ? 'shadow-xl shadow-red-500/20' : 'shadow-[0_0_30px_-10px_rgba(239,68,68,0.4)]';
+    } else if (isSuccess) {
+        borderClass = 'border-green-500';
+        shadowClass = selected ? 'shadow-xl shadow-green-500/20' : 'shadow-[0_0_30px_-10px_rgba(34,197,94,0.4)]';
     } else if (selected) {
         borderClass = 'border-blue-500';
-    } else if (isSuccess) {
-        borderClass = 'border-emerald-500';
-    } else if (isError) {
-        borderClass = 'border-rose-500';
     }
 
     // Status info
     const getStatusInfo = () => {
         if (isRestarting) return { text: '🔄 RESTARTING...', color: 'text-amber-600', border: 'border-amber-200', dot: 'bg-amber-500 animate-pulse' };
         if (isStopped) return { text: '🛑 STOPPED', color: 'text-red-600', border: 'border-red-200', dot: 'bg-red-500' };
-        if (isRunning) return { text: 'Running logic cycles...', color: 'text-purple-600', border: 'border-purple-200', dot: 'bg-purple-500 animate-pulse' };
-        if (isSuccess) return { text: 'Task Completed', color: 'text-emerald-600', border: 'border-emerald-200', dot: 'bg-emerald-500' };
-        if (isError) return { text: 'Execution Failed', color: 'text-rose-600', border: 'border-rose-200', dot: 'bg-rose-500' };
+        if (isRunning) return { text: 'Running logic cycles...', color: 'text-yellow-600', border: 'border-yellow-200', dot: 'bg-yellow-500 animate-pulse' };
+        if (isSuccess) return { text: 'Task Completed', color: 'text-green-600', border: 'border-green-200', dot: 'bg-green-500' };
+        if (isError) return { text: 'Execution Failed', color: 'text-red-600', border: 'border-red-200', dot: 'bg-red-500' };
         return { text: 'System Ready', color: 'text-gray-500', border: 'border-gray-200', dot: 'bg-gray-400' };
     };
     const statusInfo = getStatusInfo();
@@ -81,7 +83,7 @@ const ReActAgentUIV2 = ({ id, data, selected }: NodeProps) => {
     const getBadgeInfo = () => {
         if (isRestarting) return { text: 'RESTARTING', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' };
         if (isStopped) return { text: 'STOPPED', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100' };
-        if (isRunning) return { text: 'THINKING...', color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100' };
+        if (isRunning) return { text: 'THINKING...', color: 'text-yellow-600', bg: 'bg-yellow-50', border: 'border-yellow-100' };
         return { text: 'GEMINI', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' };
     };
     const badgeInfo = getBadgeInfo();
@@ -90,29 +92,32 @@ const ReActAgentUIV2 = ({ id, data, selected }: NodeProps) => {
 
     return (
         <div className={`relative group ${widthClass} transition-all duration-300`}>
+
             {/* Glow layers */}
-            {isRunning && <div className="absolute -inset-[4px] rounded-2xl bg-purple-500/30 blur-lg animate-pulse z-0" />}
+            {isRunning && <div className="absolute -inset-[4px] rounded-2xl bg-yellow-400/30 blur-lg animate-pulse z-0" />}
             {isRestarting && <div className="absolute -inset-[4px] rounded-2xl bg-amber-500/30 blur-lg animate-pulse z-0" />}
 
             {/* Spinning border gradient */}
             {isRunning && (
                 <div className="absolute -inset-[5px] rounded-2xl overflow-hidden pointer-events-none z-0">
-                    <div className="absolute inset-[-100%] bg-[conic-gradient(from_0deg_at_50%_50%,#fdf4ff_0%,#a855f7_50%,#d946ef_100%)] animate-[spin_3s_linear_infinite]" />
+                    <div className="absolute inset-[-100%] bg-[conic-gradient(from_0deg_at_50%_50%,#fef08a_0%,#eab308_50%,#ca8a04_100%)] animate-[spin_3s_linear_infinite]" />
                 </div>
             )}
 
             {/* MAIN CARD */}
-            <div className={`
-                relative flex flex-col w-full rounded-2xl overflow-hidden z-10 transition-all duration-300
-                ${showLogs ? 'bg-gray-900' : 'bg-white'} border-2 ${borderClass} ${shadowClass}
-            `}>
+            <div 
+                className={`
+                    relative flex flex-col w-full rounded-2xl overflow-hidden z-10 transition-all duration-300
+                    ${showLogs ? 'bg-gray-900' : 'bg-white'} border-2 ${borderClass} ${shadowClass}
+                `}
+            >
                 {/* Header (always visible) */}
                 <div className={`flex items-center gap-4 p-4 border-b ${showLogs ? 'border-gray-700/50 bg-gray-900' : 'border-gray-100 bg-white'}`}>
                     <div className={`
                         flex items-center justify-center w-10 h-10 rounded-xl border shadow-sm transition-colors duration-300
-                        ${isRunning ? 'bg-purple-50 border-purple-200' : showLogs ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-100'}
+                        ${isRunning ? 'bg-yellow-50 border-yellow-200' : showLogs ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-100'}
                     `}>
-                        <Bot size={20} className={isRunning ? 'text-purple-500 animate-pulse' : showLogs ? 'text-gray-400' : 'text-gray-500'} />
+                        <Bot size={20} className={isRunning ? 'text-yellow-500 animate-pulse' : showLogs ? 'text-gray-400' : 'text-gray-500'} />
                     </div>
 
                     <div className="flex flex-col gap-0.5 min-w-0 flex-1">

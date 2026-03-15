@@ -35,9 +35,9 @@ export const Footer = memo(({
                 <button
                     onClick={handleGenerate}
                     disabled={isLoading}
-                    className={`flex-grow flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition-all ${isLoading ? 'bg-gray-100 text-gray-400' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-indigo-300 hover:text-indigo-600'}`}
+                    className={`flex-grow flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition-all ${isLoading ? 'bg-gray-100 text-gray-400' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-yellow-300 hover:text-yellow-600'}`}
                 >
-                    {isLoading ? <div className="w-3 h-3 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" /> : <Sparkles size={12} />}
+                    {isLoading ? <div className="w-3 h-3 border-2 border-yellow-500/30 border-t-yellow-500 rounded-full animate-spin" /> : <Sparkles size={12} />}
                     {isLoading ? 'Dreaming...' : 'Generate'}
                 </button>
             )}
@@ -82,7 +82,7 @@ export const Footer = memo(({
                     {/* Info Toggle */}
                     <button
                         onClick={() => setShowInfo(!showInfo)}
-                        className={`p-1.5 rounded transition-colors ${showInfo ? 'bg-indigo-50 text-indigo-600' : 'text-stone-400 hover:text-stone-600'}`}
+                        className={`p-1.5 rounded transition-colors ${showInfo ? 'bg-yellow-50 text-yellow-600' : 'text-stone-400 hover:text-stone-600'}`}
                         title="Show Info"
                     >
                         <Info size={14} />
@@ -94,7 +94,7 @@ export const Footer = memo(({
                             flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-semibold shadow-sm transition-all
                             ${uiRender?.badge_color === 'red'
                                 ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-200'
-                                : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                                : 'bg-yellow-600 hover:bg-yellow-700 text-white'
                             }
                         `}
                     >

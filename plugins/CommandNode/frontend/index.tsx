@@ -223,9 +223,9 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
         ringClass = "ring-2 ring-blue-500";
         shadowClass = "shadow-xl shadow-blue-500/30";
     } else if (isRunning || data.execution_status === 'running') {
-        // Match the Purple/Fuchsia border animation
-        ringClass = "ring-1 ring-purple-500/50";
-        shadowClass = "shadow-xl shadow-purple-500/20";
+        // Match the ReActAgentV2 border style
+        ringClass = "ring-transparent";
+        shadowClass = "shadow-[0_0_40px_-10px_rgba(234,179,8,0.5)]";
     } else if (data.execution_status === 'attention_required') {
         ringClass = "ring-2 ring-amber-500 animate-pulse";
         shadowClass = "shadow-xl shadow-amber-500/30";
@@ -267,14 +267,14 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
             )}
 
             {isLoading && (
-                <div className="absolute -inset-[3px] rounded-xl overflow-hidden pointer-events-none">
-                    <div className="absolute inset-[-100%] animate-[spin_4s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#F1F5F9_0%,#6366f1_50%,#a855f7_100%)]" />
+                <div className="absolute -inset-[4px] rounded-xl overflow-hidden pointer-events-none z-0">
+                    <div className="absolute inset-[-100%] animate-[spin_4s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#fef08a_0%,#eab308_50%,#ca8a04_100%)]" />
                 </div>
             )}
 
             {(isRunning || data.execution_status === 'running') && (
-                <div className="absolute -inset-[5px] rounded-xl overflow-hidden pointer-events-none">
-                    <div className="absolute inset-[-100%] animate-[spin_3s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#F1F5F9_0%,#a855f7_50%,#d946ef_100%)]" />
+                <div className="absolute -inset-[5px] rounded-xl overflow-hidden pointer-events-none z-0">
+                    <div className="absolute inset-[-100%] animate-[spin_3s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#fef08a_0%,#eab308_50%,#ca8a04_100%)]" />
                 </div>
             )}
 
@@ -330,9 +330,9 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                             <div className="flex h-full">
                                 <button
                                     onClick={() => setActiveTab('stream')}
-                                    className={`flex items-center gap-2 px-4 h-full text-[10px] font-medium transition-colors ${activeTab === 'stream' ? 'bg-[#1e1e1e] text-white border-t-2 border-indigo-500' : 'text-gray-500 hover:text-gray-300 hover:bg-[#2a2a2b]'}`}
+                                    className={`flex items-center gap-2 px-4 h-full text-[10px] font-medium transition-colors ${activeTab === 'stream' ? 'bg-[#1e1e1e] text-white border-t-2 border-yellow-500' : 'text-gray-500 hover:text-gray-300 hover:bg-[#2a2a2b]'}`}
                                 >
-                                    <div className={`w-1.5 h-1.5 rounded-full ${data.execution_status === 'running' ? 'bg-indigo-500 animate-pulse' : 'bg-gray-400'}`} />
+                                    <div className={`w-1.5 h-1.5 rounded-full ${data.execution_status === 'running' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400'}`} />
                                     OUTPUT
                                 </button>
                                 <button
@@ -411,8 +411,8 @@ const CommandNodeComponent = ({ id, data, selected }: NodeProps<CommandNodeData>
                     setShowInfo={updateShowInfo}
                 />
 
-                <Handle type="target" position={Position.Left} className="!w-3 !h-3 !bg-stone-400 !border-2 !border-white transition-all hover:scale-125 hover:!bg-indigo-500" />
-                <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-stone-400 !border-2 !border-white transition-all hover:scale-125 hover:!bg-indigo-500" />
+                <Handle type="target" position={Position.Left} className="!w-3 !h-3 !bg-stone-400 !border-2 !border-white transition-all hover:scale-125 hover:!bg-yellow-500" />
+                <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-stone-400 !border-2 !border-white transition-all hover:scale-125 hover:!bg-yellow-500" />
             </div>
         </div>
     );

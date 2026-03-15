@@ -73,7 +73,7 @@ export const Header = memo(({
         <div className="bg-white px-3 py-2.5 border-b border-gray-100 flex items-center gap-2 flex-shrink-0">
             <div className={`
                 p-1.5 rounded-lg flex items-center justify-center transition-colors
-                ${isLoading ? 'bg-indigo-50 text-indigo-600' : 'bg-stone-50 text-stone-600'}
+                ${isLoading ? 'bg-yellow-50 text-yellow-600' : 'bg-stone-50 text-stone-600'}
             `}>
                 <Sparkles size={14} className={isLoading ? 'animate-spin-slow' : ''} />
             </div>
@@ -82,7 +82,7 @@ export const Header = memo(({
                 {!showSettings ? (
                     <input
                         type="text"
-                        className="nodrag w-full text-xs font-medium text-gray-700 placeholder:text-gray-400 bg-stone-50 border border-transparent focus:border-indigo-200 focus:bg-white focus:ring-2 focus:ring-indigo-50/50 rounded px-2 py-1 transition-all duration-200"
+                        className="nodrag w-full text-xs font-medium text-gray-700 placeholder:text-gray-400 bg-stone-50 border border-transparent focus:border-yellow-200 focus:bg-white focus:ring-2 focus:ring-yellow-50/50 rounded px-2 py-1 transition-all duration-200"
                         value={localPrompt}
                         onChange={(e) => setLocalPrompt(e.target.value)}
                         onBlur={() => {
