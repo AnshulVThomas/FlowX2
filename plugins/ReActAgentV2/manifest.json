@@ -1,0 +1,9 @@
+{
+    "id": "reactAgentV2",
+    "name": "ReAct Agent V2",
+    "category": "Intelligence",
+    "description": "Autonomous AI. Connect Tool nodes to grant it capabilities.",
+    "color": "#10b981",
+    "backend_class": "ReActAgentNodeV2",
+    "frontend_component": "ReActAgentUIV2"
+}
