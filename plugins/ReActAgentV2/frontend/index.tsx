@@ -1,6 +1,6 @@
 import { memo, useCallback, useState, useEffect, useRef } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow } from '@xyflow/react';
-import { Bot, Cpu, Sparkles, RotateCcw, ScrollText } from 'lucide-react';
+import { Bot, Cpu, Sparkles, RotateCcw, ScrollText, Maximize, Minimize } from 'lucide-react';
 
 const ReActAgentUIV2 = ({ id, data, selected }: NodeProps) => {
     const { setNodes } = useReactFlow();
@@ -8,6 +8,7 @@ const ReActAgentUIV2 = ({ id, data, selected }: NodeProps) => {
     // Local state
     const [localPrompt, setLocalPrompt] = useState(data.prompt as string || '');
     const [showLogs, setShowLogs] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
     const logEndRef = useRef<HTMLDivElement>(null);
 
     // Sync external prompt changes
@@ -90,8 +91,10 @@ const ReActAgentUIV2 = ({ id, data, selected }: NodeProps) => {
     };
     const badgeInfo = getBadgeInfo();
 
+    const widthClass = isExpanded ? 'w-[560px] min-w-[560px] max-w-[560px]' : 'w-[340px] min-w-[340px] max-w-[340px]';
+
     return (
-        <div className="relative group w-[340px]">
+        <div className={`relative group ${widthClass} transition-all duration-300`}>
             {/* Glow layers */}
             {isRunning && <div className="absolute -inset-[4px] rounded-2xl bg-purple-500/30 blur-lg animate-pulse z-0" />}
             {isRestarting && <div className="absolute -inset-[4px] rounded-2xl bg-amber-500/30 blur-lg animate-pulse z-0" />}
@@ -129,17 +132,29 @@ const ReActAgentUIV2 = ({ id, data, selected }: NodeProps) => {
                         </div>
                     </div>
 
-                    {/* Toggle Button */}
-                    <button
-                        onClick={() => setShowLogs(!showLogs)}
-                        className={`p-1.5 rounded-lg transition-colors ${showLogs ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
-                        title={showLogs ? 'Show Prompt' : 'Show Logs'}
-                    >
-                        {showLogs
-                            ? <RotateCcw size={14} className="text-gray-400" />
-                            : <ScrollText size={14} className="text-gray-400" />
-                        }
-                    </button>
+                    {/* Toggle Buttons */}
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={() => setIsExpanded(!isExpanded)}
+                            className={`p-1.5 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-800`}
+                            title={isExpanded ? 'Shrink' : 'Expand'}
+                        >
+                            {isExpanded
+                                ? <Minimize size={14} className="text-gray-400" />
+                                : <Maximize size={14} className="text-gray-400" />
+                            }
+                        </button>
+                        <button
+                            onClick={() => setShowLogs(!showLogs)}
+                            className={`p-1.5 rounded-lg transition-colors ${showLogs ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
+                            title={showLogs ? 'Show Prompt' : 'Show Logs'}
+                        >
+                            {showLogs
+                                ? <RotateCcw size={14} className="text-gray-400" />
+                                : <ScrollText size={14} className="text-gray-400" />
+                            }
+                        </button>
+                    </div>
                 </div>
 
                 {/* === CONDITIONAL CONTENT === */}
@@ -188,15 +203,25 @@ const ReActAgentUIV2 = ({ id, data, selected }: NodeProps) => {
                             </div>
                             {isRunning && <span className="text-[9px] text-purple-400 animate-pulse font-bold">● LIVE</span>}
                         </div>
-                        <div className="overflow-y-auto overflow-x-hidden p-3 max-h-[200px] min-h-[160px] scrollbar-thin scrollbar-thumb-gray-700">
+                        <div 
+                            className="overflow-y-auto p-3 max-h-[300px] min-h-[160px] nowheel nodrag scrollbar-thin scrollbar-thumb-gray-700 pb-4"
+                            style={{ overflowX: 'auto', overflowY: 'auto', width: '100%', maxWidth: isExpanded ? '556px' : '336px', boxSizing: 'border-box' }}
+                            onWheelCapture={(e) => e.stopPropagation()} 
+                        >
                             {logs.length === 0 ? (
                                 <div className="flex items-center justify-center h-[140px]">
                                     <span className="text-[11px] text-gray-600 italic">No logs yet. Run workflow to see agent thoughts.</span>
                                 </div>
                             ) : (
-                                <div className="space-y-0.5">
+                                <div className="flex flex-col space-y-1" style={{ width: 'max-content', minWidth: '100%' }}>
                                     {logs.map((log, i) => (
-                                        <pre key={i} className="text-[10px] text-gray-300 font-mono whitespace-pre-wrap break-all leading-relaxed max-w-full">{log}</pre>
+                                        <pre 
+                                            key={i} 
+                                            className="text-[10px] text-gray-300 font-mono leading-relaxed block"
+                                            style={{ whiteSpace: 'pre', margin: 0, paddingRight: '1rem' }}
+                                        >
+                                            {log}
+                                        </pre>
                                     ))}
                                     <div ref={logEndRef} />
                                 </div>

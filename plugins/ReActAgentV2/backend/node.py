@@ -110,6 +110,8 @@ class ReActAgentNodeV2(FlowXNode):
                 memory_str += f"- Attempt {i+1}: Action '{mem.get('summary')}'. Outcome: {mem.get('outcome')}\n"
         
         print(f"[AGENT V2 🧠] Loaded Memory: {len(past_memories)} entries.", flush=True)
+        if emit:
+            await emit("node_log", {"nodeId": node_id, "log": f"🔧 System: Init with Run ID [{run_id[-6:]}] - Memories: {len(past_memories)}\n", "type": "stdout"})
 
         # 3. DYNAMIC CAPABILITY LOADING
         inputs = payload.get("inputs", {})
