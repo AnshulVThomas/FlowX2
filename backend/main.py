@@ -379,6 +379,12 @@ async def execute_workflow(workflow_data: dict, background_tasks: BackgroundTask
                     continue # Loop again
 
                 # Normal Completion or Failure
+                # Emit final status to ALL start nodes so StartNode UI shows workflow outcome
+                for sn in workflow_data.get('nodes', []):
+                    if sn.get('type') == 'startNode':
+                        final_ui_status = 'completed' if status == 'COMPLETED' else 'failed'
+                        await emit_to_frontend('node_status', {'nodeId': sn['id'], 'status': final_ui_status})
+
                 return {
                     "thread_id": thread_id, 
                     "status": status,
@@ -397,6 +403,13 @@ async def execute_workflow(workflow_data: dict, background_tasks: BackgroundTask
             traceback.print_exc()
             return {"status": "FAILED", "error": str(e), "thread_id": thread_id}
         finally:
+            # Cleanup: delete agent memory for this thread
+            try:
+                database = db.get_db()
+                await database.agent_memories.delete_many({"thread_id": thread_id})
+                print(f"🧹 Cleaned up agent memory for thread {thread_id}")
+            except Exception as cleanup_e:
+                print(f"⚠️ Memory cleanup failed: {cleanup_e}")
             # Cleanup registry
             if thread_id in active_executions:
                 del active_executions[thread_id]

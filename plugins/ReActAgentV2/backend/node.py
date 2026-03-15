@@ -1,7 +1,9 @@
 import json
 import re
 import os
+import sys
 import asyncio
+import traceback
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from engine.protocol import FlowXNode, ValidationResult
@@ -67,12 +69,13 @@ class ReActAgentNodeV2(FlowXNode):
         return {"valid": True, "errors": []}
 
     async def execute(self, ctx: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+      try:
         runtime_ctx = ctx.get("context", {})
         emit = runtime_ctx.get("emit_event")
         thread_id = runtime_ctx.get("thread_id") 
         node_id = self.data.get("id")
         
-        print(f"[AGENT 🧠] Starting Execution. Thread: {thread_id}, Node: {node_id}")
+        print(f"[AGENT V2 🧠] Starting Execution. Thread: {thread_id}, Node: {node_id}", flush=True)
 
         # DEBUG: 5s Wait to observe animations without LLM call (dev mode only)
         if os.getenv("FLOWX_MODE") == "dev":
@@ -82,9 +85,13 @@ class ReActAgentNodeV2(FlowXNode):
             return {"status": "success", "output": {"response": "DEBUG: Thinking complete.", "history": []}}
 
         # 1. SETUP CLIENT
-        api_key = os.getenv("GEMINI_API_KEY") 
-        if not api_key: return {"status": "failed", "output": {"error": "Missing GEMINI_API_KEY"}}
+        api_key = os.getenv("GOOGLE_API_KEY") 
+        if not api_key:
+            print("[AGENT V2 🔴] Missing GOOGLE_API_KEY", flush=True)
+            return {"status": "failed", "output": {"error": "Missing GOOGLE_API_KEY"}}
+        print(f"[AGENT V2 🐛] Creating genai.Client...", flush=True)
         client = genai.Client(api_key=api_key)
+        print(f"[AGENT V2 🐛] Client created OK", flush=True)
 
         # 2. LOAD LONG-TERM MEMORY (The "Brain" Restore)
         past_memories = await fetch_agent_memory(thread_id, node_id)
@@ -95,33 +102,32 @@ class ReActAgentNodeV2(FlowXNode):
             for i, mem in enumerate(past_memories):
                 memory_str += f"- Attempt {i+1}: Action '{mem.get('summary')}'. Outcome: {mem.get('outcome')}\n"
         
-        print(f"[AGENT 🧠] Loaded Memory: {len(past_memories)} entries.")
+        print(f"[AGENT V2 🧠] Loaded Memory: {len(past_memories)} entries.", flush=True)
 
         # 3. DYNAMIC CAPABILITY LOADING
         inputs = payload.get("inputs", {})
         allowed_tools = {}     
         tool_definitions = []  
-        context_str = "--- CONTEXT ---\n"
         
-        print(f"[AGENT 🧠] Loading Tools from {len(inputs)} input nodes...")
+        print(f"[AGENT V2 🧠] Loading Tools from {len(inputs)} input nodes...", flush=True)
 
-        for parent_id, data in inputs.items():
-            output = data.get("output", {})
-            
-            # CHECK FOR PERMISSION TOKEN
-            if output.get("type") == "TOOL_DEF":
-                tool_def = output.get("definition")
-                t_name = tool_def["name"]
-                print(f"[AGENT 🧠] + Connected Tool: {t_name}")
+        for parent_id, parent_data in inputs.items():
+            try:
+                if not isinstance(parent_data, dict):
+                    continue
+                output = parent_data.get("output", {})
                 
-                # Support "Offloaded Function" Pattern (Function explicitly provided)
-                if "implementation" in output:
-                    allowed_tools[t_name] = output["implementation"]
-                    tool_definitions.append(tool_def)
-
-            else:
-                # Standard Context (e.g. Command Node output)
-                context_str += f"[Node {parent_id}]: {output.get('stdout', str(output))}\n"
+                # Only load TOOL_DEF inputs — ignore all other parent outputs
+                if isinstance(output, dict) and output.get("type") == "TOOL_DEF":
+                    tool_def = output.get("definition")
+                    t_name = tool_def["name"]
+                    print(f"[AGENT V2 🧠] + Connected Tool: {t_name}", flush=True)
+                    
+                    if "implementation" in output:
+                        allowed_tools[t_name] = output["implementation"]
+                        tool_definitions.append(tool_def)
+            except Exception as loop_e:
+                print(f"[AGENT V2 ⚠️] Input error for {parent_id}: {loop_e}", flush=True)
 
         # 4. CONSTRUCT SYSTEM PROMPT WITH MEMORY
         tools_desc = "NO TOOLS AVAILABLE."
@@ -151,7 +157,7 @@ class ReActAgentNodeV2(FlowXNode):
 
         messages = [
             {"role": "system", "content": system_persona},
-            {"role": "user", "content": f"{context_str}\nCURRENT OBJECTIVE: {self.data.get('prompt')}"}
+            {"role": "user", "content": f"CURRENT OBJECTIVE: {self.data.get('prompt')}"}
         ]
 
         # 5. REACT LOOP (Max 5 Steps)
@@ -167,6 +173,11 @@ class ReActAgentNodeV2(FlowXNode):
         ctx_window = int(os.getenv("REACT_AGENT_CTX_WINDOW", 6))  # Max conversation pairs to keep
 
         for i in range(int(os.getenv("REACT_AGENT_MAX_STEPS", 5))):
+            # Rate-limit: wait between successive LLM calls (skip first iteration)
+            if i > 0:
+                cooldown = float(os.getenv("REACT_AGENT_COOLDOWN", 2))
+                await asyncio.sleep(cooldown)
+
             if emit: await emit("node_log", {"nodeId": node_id, "log": f"\n🤖 [Step {i+1}] Thinking...\n", "type": "stdout"})
 
             # SLIDING WINDOW: Trim messages to prevent context overflow
@@ -193,9 +204,9 @@ class ReActAgentNodeV2(FlowXNode):
             messages.append({"role": "assistant", "content": llm_raw})
             
             decision = extract_json(llm_raw)
-            if decision is None:
-                print(f"[AGENT ⚠️] Failed to extract JSON from LLM output: {llm_raw[:200]}")
-                messages.append({"role": "user", "content": "Error: Your response was not valid JSON. Respond with ONLY a JSON object."})
+            if not isinstance(decision, dict):
+                print(f"[AGENT V2 ⚠️] Failed to extract valid JSON dict from LLM output: {llm_raw[:200]}", flush=True)
+                messages.append({"role": "user", "content": "Error: Your response must be a valid JSON object, not a string or list. Respond with ONLY a JSON object."})
                 continue
 
             action = decision.get("action")
@@ -234,18 +245,25 @@ class ReActAgentNodeV2(FlowXNode):
                     
                     # --- SIGNAL DETECTION ---
                     if isinstance(tool_output, str) and tool_output.startswith("__FLOWX_SIGNAL__"):
-                        print(f"[AGENT 🚨] SIGNAL RECEIVED: {tool_output}")
-                        # Save memory immediately before the engine kills the process
+                        signal_type = 'restarting' if 'RESTART' in tool_output else 'stopped'
+                        print(f"[AGENT V2 🚨] SIGNAL: {signal_type.upper()}", flush=True)
+                        
+                        # Emit signal status to frontend
+                        if emit:
+                            await emit("node_status", {"nodeId": node_id, "status": signal_type})
+                            await emit("node_log", {"nodeId": node_id, "log": f"\n🚨 Signal: {signal_type.upper()}\n", "type": "stdout"})
+                        
+                        # Save memory immediately
                         await append_agent_memory(thread_id, node_id, {
                             "summary": run_summary_action,
-                            "outcome": "triggered_signal",
+                            "outcome": f"triggered_{signal_type}",
                             "steps": i+1
                         })
 
                         return {
                             "status": "success",
                             "output": {
-                                "response": "Control Signal Triggered",
+                                "response": f"Signal: {signal_type}",
                                 "signal": tool_output,
                                 "history": history_log
                             }
@@ -274,6 +292,11 @@ class ReActAgentNodeV2(FlowXNode):
         })
 
         return {"status": "success", "output": {"response": final_response, "history": history_log}} 
+
+      except Exception as fatal_e:
+        print(f"[AGENT V2 💀] FATAL UNHANDLED ERROR: {fatal_e}", flush=True)
+        traceback.print_exc()
+        return {"status": "failed", "output": {"error": f"Agent V2 Fatal: {str(fatal_e)}"}}
 
 
     def get_execution_mode(self) -> Dict[str, bool]:

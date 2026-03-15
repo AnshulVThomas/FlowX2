@@ -54,7 +54,7 @@ class FileChangeDetectorNode(FlowXNode):
                 # Check if target node ID exists in inputs payload
                 if target_node_id in inputs:
                     # Extract nested field if dots exist
-                    current_data = inputs[target_node_id].get("output", {})
+                    current_data = inputs[target_node_id].get("output", {}) if isinstance(inputs[target_node_id], dict) else inputs[target_node_id]
                     
                     fields = target_field.split('.')
                     for field in fields:

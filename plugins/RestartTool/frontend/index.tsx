@@ -2,7 +2,7 @@ import { memo, useCallback } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow, type Connection } from '@xyflow/react';
 import { RotateCcw } from 'lucide-react';
 
-const ALLOWED_TARGETS = ['reactAgent'];
+const ALLOWED_TARGETS = ['reactAgent', 'reactAgentV2'];
 
 const RestartToolUI = ({ data, selected }: NodeProps) => {
     const { getNode } = useReactFlow();

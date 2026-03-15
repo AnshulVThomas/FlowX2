@@ -169,7 +169,7 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
                         {data.name || 'Start'}
                     </span>
                     <span className={`text-xs font-bold tracking-wide uppercase mt-0.5 ${isStarting ? 'text-amber-500' : styles.textClass}`}>
-                        {isStarting ? 'STARTING...' : (data.status || 'IDLE')}
+                        {isStarting ? 'RUNNING...' : (data.status === 'completed' ? 'COMPLETED ✓' : data.status === 'failed' ? 'FAILED ✗' : (data.status || 'IDLE'))}
                     </span>
                 </div>
 

@@ -234,7 +234,7 @@ class AsyncGraphExecutor:
             self.results[node_id] = result
             self.node_status[node_id] = "completed"
             
-            status_str = "completed" if result.get("status") == "success" else "failed"
+            status_str = "completed" if isinstance(result, dict) and result.get("status") == "success" else "failed"
             print(f"[BACKEND] [{node_id}] Finished with status: {status_str}")
             
             if self.emit_event:
@@ -245,6 +245,7 @@ class AsyncGraphExecutor:
 
         except Exception as e:
             # Error Handling
+            print(f"[BACKEND] [{node_id}] EXECUTION ERROR: {e}", flush=True)
             self.errors.append({"nodeId": node_id, "error": str(e)})
             self.results[node_id] = {"status": "failed", "error": str(e)}
             self.node_status[node_id] = "failed"

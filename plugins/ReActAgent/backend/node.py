@@ -105,23 +105,29 @@ class ReActAgentNode(FlowXNode):
         
         print(f"[AGENT 🧠] Loading Tools from {len(inputs)} input nodes...")
 
-        for parent_id, data in inputs.items():
-            output = data.get("output", {})
-            
-            # CHECK FOR PERMISSION TOKEN
-            if output.get("type") == "TOOL_DEF":
-                tool_def = output.get("definition")
-                t_name = tool_def["name"]
-                print(f"[AGENT 🧠] + Connected Tool: {t_name}")
+        for parent_id, parent_data in inputs.items():
+            try:
+                if not isinstance(parent_data, dict):
+                    context_str += f"[Node {parent_id}]: {str(parent_data)}\n"
+                    continue
+                output = parent_data.get("output", {})
                 
-                # Support "Offloaded Function" Pattern (Function explicitly provided)
-                if "implementation" in output:
-                    allowed_tools[t_name] = output["implementation"]
-                    tool_definitions.append(tool_def)
+                # CHECK FOR PERMISSION TOKEN
+                if isinstance(output, dict) and output.get("type") == "TOOL_DEF":
+                    tool_def = output.get("definition")
+                    t_name = tool_def["name"]
+                    print(f"[AGENT 🧠] + Connected Tool: {t_name}")
+                    
+                    # Support "Offloaded Function" Pattern (Function explicitly provided)
+                    if "implementation" in output:
+                        allowed_tools[t_name] = output["implementation"]
+                        tool_definitions.append(tool_def)
 
-            else:
-                # Standard Context (e.g. Command Node output)
-                context_str += f"[Node {parent_id}]: {output.get('stdout', str(output))}\n"
+                else:
+                    # Standard Context (e.g. Command Node output)
+                    context_str += f"[Node {parent_id}]: {output.get('stdout', str(output)) if isinstance(output, dict) else str(output)}\n"
+            except Exception as loop_e:
+                print(f"[AGENT 🐛] Input loop error for {parent_id}: {loop_e}")
 
         # 4. CONSTRUCT SYSTEM PROMPT WITH MEMORY
         tools_desc = "NO TOOLS AVAILABLE."
@@ -187,9 +193,9 @@ class ReActAgentNode(FlowXNode):
             messages.append({"role": "assistant", "content": llm_raw})
             
             decision = extract_json(llm_raw)
-            if decision is None:
-                print(f"[AGENT ⚠️] Failed to extract JSON from LLM output: {llm_raw[:200]}")
-                messages.append({"role": "user", "content": "Error: Your response was not valid JSON. Respond with ONLY a JSON object."})
+            if not isinstance(decision, dict):
+                print(f"[AGENT ⚠️] Failed to extract valid JSON dict from LLM output: {llm_raw[:200]}")
+                messages.append({"role": "user", "content": "Error: Your response must be a valid JSON object, not a string or list. Respond with ONLY a JSON object."})
                 continue
 
             action = decision.get("action")
