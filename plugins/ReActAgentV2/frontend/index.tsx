@@ -27,12 +27,7 @@ const ReActAgentUIV2 = ({ id, data, selected }: NodeProps) => {
         }
     }, [logs.length, showLogs]);
 
-    // Auto-switch to logs when running
-    useEffect(() => {
-        if (data.execution_status === 'running') {
-            setShowLogs(true);
-        }
-    }, [data.execution_status]);
+
 
     const handleBlur = useCallback(() => {
         setNodes((nodes) => nodes.map((node) => {
@@ -134,16 +129,18 @@ const ReActAgentUIV2 = ({ id, data, selected }: NodeProps) => {
 
                     {/* Toggle Buttons */}
                     <div className="flex items-center gap-1">
-                        <button
-                            onClick={() => setIsExpanded(!isExpanded)}
-                            className={`p-1.5 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-800`}
-                            title={isExpanded ? 'Shrink' : 'Expand'}
-                        >
-                            {isExpanded
-                                ? <Minimize size={14} className="text-gray-400" />
-                                : <Maximize size={14} className="text-gray-400" />
-                            }
-                        </button>
+                        {showLogs && (
+                            <button
+                                onClick={() => setIsExpanded(!isExpanded)}
+                                className={`p-1.5 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-800`}
+                                title={isExpanded ? 'Shrink' : 'Expand'}
+                            >
+                                {isExpanded
+                                    ? <Minimize size={14} className="text-gray-400" />
+                                    : <Maximize size={14} className="text-gray-400" />
+                                }
+                            </button>
+                        )}
                         <button
                             onClick={() => setShowLogs(!showLogs)}
                             className={`p-1.5 rounded-lg transition-colors ${showLogs ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
@@ -204,7 +201,7 @@ const ReActAgentUIV2 = ({ id, data, selected }: NodeProps) => {
                             {isRunning && <span className="text-[9px] text-purple-400 animate-pulse font-bold">● LIVE</span>}
                         </div>
                         <div 
-                            className="overflow-y-auto p-3 max-h-[300px] min-h-[160px] nowheel nodrag scrollbar-thin scrollbar-thumb-gray-700 pb-4"
+                            className="p-3 max-h-[300px] min-h-[160px] nowheel nodrag scrollbar-thin scrollbar-thumb-gray-700 pb-4 relative"
                             style={{ overflowX: 'auto', overflowY: 'auto', width: '100%', maxWidth: isExpanded ? '556px' : '336px', boxSizing: 'border-box' }}
                             onWheelCapture={(e) => e.stopPropagation()} 
                         >
@@ -213,12 +210,12 @@ const ReActAgentUIV2 = ({ id, data, selected }: NodeProps) => {
                                     <span className="text-[11px] text-gray-600 italic">No logs yet. Run workflow to see agent thoughts.</span>
                                 </div>
                             ) : (
-                                <div className="flex flex-col space-y-1" style={{ width: 'max-content', minWidth: '100%' }}>
+                                <div className="space-y-1 min-w-full" style={{ width: 'max-content' }}>
                                     {logs.map((log, i) => (
                                         <pre 
                                             key={i} 
                                             className="text-[10px] text-gray-300 font-mono leading-relaxed block"
-                                            style={{ whiteSpace: 'pre', margin: 0, paddingRight: '1rem' }}
+                                            style={{ whiteSpace: 'pre', margin: 0 }}
                                         >
                                             {log}
                                         </pre>
