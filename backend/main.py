@@ -311,12 +311,13 @@ async def execute_workflow(workflow_data: dict, background_tasks: BackgroundTask
     from engine.async_runner import AsyncGraphExecutor
     import uuid
     thread_id = str(uuid.uuid4())
+    run_id = str(uuid.uuid4())  # Unique per manual start, stable across restart loop
     
     # Extract Global Context (Secrets) from payload
-    # Frontend should send 'secrets' or top-level keys
     sudo_password = workflow_data.get("sudo_password") or workflow_data.get("secrets", {}).get("sudo_password")
     global_context = {
-        "sudo_password": sudo_password
+        "sudo_password": sudo_password,
+        "run_id": run_id
     }
     
     # Tier 4: Inject WebSocket Emitter
@@ -403,14 +404,7 @@ async def execute_workflow(workflow_data: dict, background_tasks: BackgroundTask
             traceback.print_exc()
             return {"status": "FAILED", "error": str(e), "thread_id": thread_id}
         finally:
-            # Cleanup: delete agent memory for this thread
-            try:
-                database = db.get_db()
-                await database.agent_memories.delete_many({"thread_id": thread_id})
-                print(f"🧹 Cleaned up agent memory for thread {thread_id}")
-            except Exception as cleanup_e:
-                print(f"⚠️ Memory cleanup failed: {cleanup_e}")
-            # Cleanup registry
+            # Cleanup registry (memory cleanup handled by MongoDB TTL index)
             if thread_id in active_executions:
                 del active_executions[thread_id]
 

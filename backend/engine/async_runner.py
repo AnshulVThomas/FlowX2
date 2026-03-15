@@ -234,7 +234,13 @@ class AsyncGraphExecutor:
             self.results[node_id] = result
             self.node_status[node_id] = "completed"
             
-            status_str = "completed" if isinstance(result, dict) and result.get("status") == "success" else "failed"
+            # Determine display status — pass through signal statuses
+            PASSTHROUGH_STATUSES = {"restarting", "stopped"}
+            raw_status = result.get("status", "failed") if isinstance(result, dict) else "failed"
+            if raw_status in PASSTHROUGH_STATUSES:
+                status_str = raw_status
+            else:
+                status_str = "completed" if raw_status == "success" else "failed"
             print(f"[BACKEND] [{node_id}] Finished with status: {status_str}")
             
             if self.emit_event:

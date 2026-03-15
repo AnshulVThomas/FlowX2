@@ -620,13 +620,13 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
                         activeThreadId: thread_id || state.activeThreadId, // Sync global active thread
                         nodes: state.nodes.map(n => {
                             if (n.id === nodeId) {
-                                // Append log to existing buffer
+                                // Append log with sliding window cap (max 100 entries)
                                 const currentLogs = (n.data as any).logs || [];
                                 return {
                                     ...n,
                                     data: {
                                         ...n.data,
-                                        logs: [...currentLogs, log],
+                                        logs: [...currentLogs, log].slice(-100),
                                         thread_id: thread_id || n.data.thread_id // Sync node thread
                                     }
                                 };

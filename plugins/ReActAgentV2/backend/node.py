@@ -28,14 +28,22 @@ def extract_json(text: str) -> Optional[dict]:
             pass
     return None
 
+# --- SAFETY HELPERS ---
+def _safe_str(val: any, limit: int = 500) -> str:
+    """Truncate any value to a safe string length for DB/context."""
+    s = str(val)
+    if len(s) > limit:
+        return s[:limit] + "...[TRUNCATED]"
+    return s
+
 # --- MEMORY HELPERS ---
-async def fetch_agent_memory(thread_id: str, node_id: str, limit: int = 5) -> List[Dict]:
-    """Retrieves the last N memory entries for this specific agent instance."""
-    if not thread_id: return []
+async def fetch_agent_memory(run_id: str, node_id: str, limit: int = 5) -> List[Dict]:
+    """Retrieves the last N memory entries for this specific agent run."""
+    if not run_id: return []
     try:
         database = db.get_db()
         doc = await database.agent_memories.find_one(
-            {"thread_id": thread_id, "node_id": node_id}
+            {"run_id": run_id, "node_id": node_id}
         )
         if doc and "history" in doc:
             return doc["history"][-limit:]
@@ -44,18 +52,18 @@ async def fetch_agent_memory(thread_id: str, node_id: str, limit: int = 5) -> Li
         print(f"[Memory Read Error] {e}")
         return []
 
-async def append_agent_memory(thread_id: str, node_id: str, entry: Dict):
-    """Appends a new execution summary to the agent's long-term memory."""
-    if not thread_id: return
+async def append_agent_memory(run_id: str, node_id: str, entry: Dict):
+    """Appends a new execution summary to the agent's run-scoped memory."""
+    if not run_id: return
     try:
         database = db.get_db()
         entry["timestamp"] = datetime.utcnow().isoformat()
         
         await database.agent_memories.update_one(
-            {"thread_id": thread_id, "node_id": node_id},
+            {"run_id": run_id, "node_id": node_id},
             {
                 "$push": {"history": {"$each": [entry], "$slice": -20}},
-                "$set": {"last_updated": datetime.utcnow()} # Top-level timestamp for TTL
+                "$set": {"last_updated": datetime.utcnow()}
             },
             upsert=True
         )
@@ -72,10 +80,11 @@ class ReActAgentNodeV2(FlowXNode):
       try:
         runtime_ctx = ctx.get("context", {})
         emit = runtime_ctx.get("emit_event")
-        thread_id = runtime_ctx.get("thread_id") 
+        thread_id = runtime_ctx.get("thread_id")
+        run_id = runtime_ctx.get("run_id", thread_id)  # Fallback to thread_id if run_id not set
         node_id = self.data.get("id")
         
-        print(f"[AGENT V2 🧠] Starting Execution. Thread: {thread_id}, Node: {node_id}", flush=True)
+        print(f"[AGENT V2 🧠] Starting Execution. Run: {run_id}, Node: {node_id}", flush=True)
 
         # DEBUG: 5s Wait to observe animations without LLM call (dev mode only)
         if os.getenv("FLOWX_MODE") == "dev":
@@ -89,12 +98,10 @@ class ReActAgentNodeV2(FlowXNode):
         if not api_key:
             print("[AGENT V2 🔴] Missing GOOGLE_API_KEY", flush=True)
             return {"status": "failed", "output": {"error": "Missing GOOGLE_API_KEY"}}
-        print(f"[AGENT V2 🐛] Creating genai.Client...", flush=True)
         client = genai.Client(api_key=api_key)
-        print(f"[AGENT V2 🐛] Client created OK", flush=True)
 
-        # 2. LOAD LONG-TERM MEMORY (The "Brain" Restore)
-        past_memories = await fetch_agent_memory(thread_id, node_id)
+        # 2. LOAD RUN-SCOPED MEMORY (resets on manual start, shared within restart loop)
+        past_memories = await fetch_agent_memory(run_id, node_id)
         
         memory_str = "NO PREVIOUS ATTEMPTS."
         if past_memories:
@@ -108,6 +115,7 @@ class ReActAgentNodeV2(FlowXNode):
         inputs = payload.get("inputs", {})
         allowed_tools = {}     
         tool_definitions = []  
+        context_str = ""  # Safe context from non-tool parent nodes
         
         print(f"[AGENT V2 🧠] Loading Tools from {len(inputs)} input nodes...", flush=True)
 
@@ -117,7 +125,6 @@ class ReActAgentNodeV2(FlowXNode):
                     continue
                 output = parent_data.get("output", {})
                 
-                # Only load TOOL_DEF inputs — ignore all other parent outputs
                 if isinstance(output, dict) and output.get("type") == "TOOL_DEF":
                     tool_def = output.get("definition")
                     t_name = tool_def["name"]
@@ -126,6 +133,10 @@ class ReActAgentNodeV2(FlowXNode):
                     if "implementation" in output:
                         allowed_tools[t_name] = output["implementation"]
                         tool_definitions.append(tool_def)
+                else:
+                    # Safely inject non-tool parent context (truncated to protect token limit)
+                    safe_output = _safe_str(output, limit=2000)
+                    context_str += f"[Node {parent_id}]: {safe_output}\n"
             except Exception as loop_e:
                 print(f"[AGENT V2 ⚠️] Input error for {parent_id}: {loop_e}", flush=True)
 
@@ -155,9 +166,14 @@ class ReActAgentNodeV2(FlowXNode):
             "{\"thought\": \"task completed\", \"action\": \"final_answer\", \"args\": {\"summary\": \"final result\"}}"
         )
 
+        # Include context from parent nodes if any
+        user_content = f"CURRENT OBJECTIVE: {self.data.get('prompt')}"
+        if context_str:
+            user_content = f"--- INCOMING CONTEXT ---\n{context_str}\n{user_content}"
+
         messages = [
             {"role": "system", "content": system_persona},
-            {"role": "user", "content": f"CURRENT OBJECTIVE: {self.data.get('prompt')}"}
+            {"role": "user", "content": user_content}
         ]
 
         # 5. REACT LOOP (Max 5 Steps)
@@ -254,14 +270,14 @@ class ReActAgentNodeV2(FlowXNode):
                             await emit("node_log", {"nodeId": node_id, "log": f"\n🚨 Signal: {signal_type.upper()}\n", "type": "stdout"})
                         
                         # Save memory immediately
-                        await append_agent_memory(thread_id, node_id, {
-                            "summary": run_summary_action,
+                        await append_agent_memory(run_id, node_id, {
+                            "summary": _safe_str(run_summary_action, 200),
                             "outcome": f"triggered_{signal_type}",
                             "steps": i+1
                         })
 
                         return {
-                            "status": "success",
+                            "status": signal_type,
                             "output": {
                                 "response": f"Signal: {signal_type}",
                                 "signal": tool_output,
@@ -278,16 +294,16 @@ class ReActAgentNodeV2(FlowXNode):
                 tool_output = f"Error: Permission Denied. Tool '{action}' is not connected."
                 print(f"[AGENT 🚫] Denied Action: {action}")
             
-            tool_output_str = str(tool_output)
-            if emit: await emit("node_log", {"nodeId": self.data.get("id"), "log": f"   -> {tool_output_str[:100]}...\n", "type": "stdout"})
+            tool_output_str = _safe_str(tool_output, 2000)
+            if emit: await emit("node_log", {"nodeId": self.data.get("id"), "log": f"   -> {tool_output_str[:150]}\n", "type": "stdout"})
             messages.append({"role": "user", "content": f"Tool Output: {tool_output_str}"})
-            history_log.append({"step": i+1, "type": "observation", "content": tool_output_str})
+            history_log.append({"step": i+1, "type": "observation", "content": _safe_str(tool_output, 500)})
 
         # 6. SAVE MEMORY (Standard Completion)
-        print(f"[AGENT 💾] Saving Memory: {run_summary_action} -> {run_outcome}")
-        await append_agent_memory(thread_id, node_id, {
-            "summary": run_summary_action,
-            "outcome": run_outcome,
+        print(f"[AGENT V2 💾] Saving Memory: {_safe_str(run_summary_action, 100)} -> {run_outcome}", flush=True)
+        await append_agent_memory(run_id, node_id, {
+            "summary": _safe_str(run_summary_action, 200),
+            "outcome": _safe_str(run_outcome, 200),
             "steps": len(history_log)
         })
 
