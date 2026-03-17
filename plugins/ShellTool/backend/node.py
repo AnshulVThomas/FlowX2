@@ -18,14 +18,19 @@ Architecture: capability token pattern.
 """
 
 import asyncio
+import os
 import re
 import shlex
+import shutil
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from database.connection import db
 from engine.protocol import FlowXNode, ValidationResult
+from pathlib import Path
 
+HOST_WORKSPACE_DIR = os.path.abspath("workspace")
+os.makedirs(HOST_WORKSPACE_DIR, exist_ok=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # POLICY
@@ -165,6 +170,41 @@ SENSITIVE_PATTERNS: List[str] = [
     r"\x1b\[[0-9;]*[mGKHJABCDFfnsu]",     # ANSI escape sequences
 ]
 
+# ══════════════════════════════════════════════════════════════════════════════
+# BWRAP AVAILABILITY (lazy probe)
+# ══════════════════════════════════════════════════════════════════════════════
+
+BWRAP_AVAILABLE = shutil.which("bwrap") is not None
+_BWRAP_FUNCTIONAL_CACHE: bool | None = None
+
+
+async def _is_bwrap_functional() -> bool:
+    """Lazily test bwrap functionality once per worker lifecycle."""
+    global _BWRAP_FUNCTIONAL_CACHE
+    if _BWRAP_FUNCTIONAL_CACHE is not None:
+        return _BWRAP_FUNCTIONAL_CACHE
+
+    if not BWRAP_AVAILABLE:
+        _BWRAP_FUNCTIONAL_CACHE = False
+        return False
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "bwrap", "--ro-bind", "/usr", "/usr",
+            "--tmpfs", "/tmp", "--proc", "/proc", "--dev", "/dev",
+            "--unshare-pid", "--die-with-parent", "--",
+            "true",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await asyncio.wait_for(proc.wait(), timeout=5)
+        _BWRAP_FUNCTIONAL_CACHE = (proc.returncode == 0)
+    except Exception:
+        _BWRAP_FUNCTIONAL_CACHE = False
+
+    print(f"[BROKER 🛡️] bwrap namespace isolation active: {_BWRAP_FUNCTIONAL_CACHE}")
+    return _BWRAP_FUNCTIONAL_CACHE
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # BROKER INTERNALS
@@ -207,6 +247,8 @@ def _build_bwrap_prefix(profile: Dict[str, Any]) -> List[str]:
         # explicit isolation (NOT --unshare-all — see docstring)
         "--unshare-pid",
         "--unshare-user",
+        "--uid", str(os.getuid()),   # Map host UID → sandbox UID (prevents nobody/65534 trap)
+        "--gid", str(os.getgid()),   # Map host GID → sandbox GID
         "--unshare-ipc",
         "--die-with-parent",    # orphan prevention
         "--new-session",        # detach from controlling TTY / process group
@@ -225,12 +267,12 @@ def _build_bwrap_prefix(profile: Dict[str, Any]) -> List[str]:
 
     # workspace: read-write for write-enabled profiles, read-only otherwise
     if profile.get("write"):
-        for path in profile.get("write_paths", ["/workspace"]):
+        for path in profile.get("write_paths", [HOST_WORKSPACE_DIR]):
             cmd += ["--bind", path, path]
     else:
-        cmd += ["--ro-bind-try", "/workspace", "/workspace"]
+        cmd += ["--ro-bind-try", HOST_WORKSPACE_DIR, HOST_WORKSPACE_DIR]
 
-    cmd += ["--chdir", "/workspace", "--"]
+    cmd += ["--chdir", HOST_WORKSPACE_DIR, "--"]
     return cmd
 
 
@@ -299,10 +341,27 @@ def _sanitize_output(text: str, max_bytes: int) -> str:
     return text
 
 
-async def _write_audit(record: Dict[str, Any]) -> None:
-    """Layer 5: Fire-and-forget audit write. Never blocks execution."""
+async def _write_audit(
+    audit_key: Dict[str, Any],
+    record_data: Dict[str, Any],
+    is_update: bool = False,
+) -> None:
+    """Layer 5: Fire-and-forget idempotent audit write."""
     try:
-        await db.get_db().shell_audit.insert_one(record)
+        collection = db.get_db().shell_audit
+        if not is_update:
+            # Pre-execution: Insert if not exists
+            await collection.update_one(
+                audit_key,
+                {"$setOnInsert": record_data},
+                upsert=True,
+            )
+        else:
+            # Post-execution: Update the existing record
+            await collection.update_one(
+                audit_key,
+                {"$set": record_data},
+            )
     except Exception as e:
         print(f"[BROKER ⚠️] Audit write failed (non-fatal): {e}")
 
@@ -324,20 +383,38 @@ async def _run_with_profile(
         return error
 
     # ── Layer 5: audit record BEFORE execution ────────────────────────────────
-    # Write intent before we fork. If the process kills the backend mid-run,
-    # we still have a pending record we can investigate.
-    audit_record = {
+    audit_key = {
         "run_id":    run_id,
         "command":   command,
-        "argv":      argv,
-        "profile":   profile.get("name", "unknown"),
         "timestamp": datetime.utcnow(),
-        "status":    "pending",
     }
-    asyncio.create_task(_write_audit(audit_record))
+    asyncio.create_task(_write_audit(
+        audit_key,
+        {
+            "argv":    argv,
+            "profile": profile.get("name", "unknown"),
+            "status":  "pending",
+        },
+        is_update=False,
+    ))
 
     # ── Layers 2 + 6: build sandboxed command ─────────────────────────────────
-    full_cmd = _build_bwrap_prefix(profile) + argv
+    use_bwrap = await _is_bwrap_functional()
+
+    if use_bwrap:
+        full_cmd = _build_bwrap_prefix(profile) + argv
+    else:
+        # Fallback: prlimit only. Layers 1, 3, 4, 5, 6, 7, 8 remain active.
+        print(f"[BROKER ⚠️] bwrap unavailable — executing without namespace isolation")
+        full_cmd = [
+            "prlimit",
+            f"--as={profile['ram_bytes']}",
+            f"--nproc={profile['max_procs']}",
+            f"--cpu={profile['cpu_seconds']}",
+            "--nofile=128",
+            "--fsize=52428800",
+            "--",
+        ] + argv
 
     print(f"[BROKER 🔵] run_id={run_id} profile={profile.get('name')} cmd={command!r}")
 
@@ -351,6 +428,7 @@ async def _run_with_profile(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=SAFE_ENV,                        # Layer 8: stripped, non-interactive environment
+            cwd=HOST_WORKSPACE_DIR if not use_bwrap else None # Force fallback to correct dir
         )
 
         wall_timeout = profile.get("wall_seconds", profile["cpu_seconds"] + 5)
@@ -404,12 +482,15 @@ async def _run_with_profile(
         print(f"[BROKER 💀] Unhandled: {e}")
 
     # ── Update audit record with outcome ──────────────────────────────────────
-    asyncio.create_task(_write_audit({
-        **audit_record,
-        "status":       status,
-        "output_bytes": len(output),
-        "completed_at": datetime.utcnow(),
-    }))
+    asyncio.create_task(_write_audit(
+        audit_key,
+        {
+            "status":       status,
+            "output_bytes": len(output),
+            "completed_at": datetime.utcnow(),
+        },
+        is_update=True,
+    ))
 
     # ── Layer 4: sanitize AFTER execution, before returning to LLM ───────────
     return _sanitize_output(output, profile["max_output_bytes"])
@@ -436,8 +517,8 @@ def _build_tool_schema(profile: Dict[str, Any]) -> Dict[str, Any]:
             f"\n\nCRITICAL CONSTRAINTS:"
             f"\n- Shell pipelines (|), redirects (> >>), and chaining (&& || ;) are NOT supported."
             f"\n- Run one command at a time. Chain logic across ReAct steps, not within one command."
-            f"\n- Environment is stateless. Each command starts fresh in /workspace."
-            f"\n- Do NOT use 'cd' or 'export'. Use absolute paths (e.g. 'ls /workspace/src')."
+            f"\n- Environment is stateless. Each command starts fresh in {HOST_WORKSPACE_DIR}."
+            f"\n- Do NOT use 'cd' or 'export'. Use absolute paths (e.g. 'ls {HOST_WORKSPACE_DIR}/src')."
             f"\n- To filter output: save to a file first, then run grep/awk on the file in the next step."
         ),
         "parameters": {
@@ -447,7 +528,7 @@ def _build_tool_schema(profile: Dict[str, Any]) -> Dict[str, Any]:
                     "type": "string",
                     "description": (
                         "A single, complete, non-interactive shell command. "
-                        "Example: 'ls -la /workspace/src' or 'grep -r TODO /workspace --include=*.py'"
+                        f"Example: 'ls -la {HOST_WORKSPACE_DIR}/src' or 'grep -r TODO {HOST_WORKSPACE_DIR} --include=*.py'"
                     ),
                 }
             },

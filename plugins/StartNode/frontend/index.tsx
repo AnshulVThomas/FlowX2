@@ -78,6 +78,14 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
     const validationStatus = useWorkflowStore((state) => state.validationStatus[id]);
     const validationErrors = useWorkflowStore((state) => state.validationErrors?.[id]);
 
+    // Check if the entire workflow is running by looking at any node's status
+    const isWorkflowRunning = useWorkflowStore((state) => 
+        state.nodes.some(n => {
+            const s = n.data?.execution_status || n.data?.status;
+            return s === 'starting' || s === 'running' || s === 'attention_required' || s === 'pending';
+        })
+    );
+
     // Derived from global websocket status, removes local state desync risk
     const isStarting = data.status === 'starting' || data.status === 'running' || data.status === 'attention_required';
 
@@ -106,14 +114,14 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
     const handleRunClick = useCallback(async (e: React.MouseEvent) => {
         e.stopPropagation();
 
-        if (isStarting) {
+        if (isWorkflowRunning) {
             toast.info('Requesting Cancellation...');
             await abortWorkflow();
             return;
         }
 
         await runExecution();
-    }, [isStarting, abortWorkflow, runExecution]);
+    }, [isWorkflowRunning, abortWorkflow, runExecution]);
 
     const handleSudoConfirm = useCallback(async (password: string) => {
         setShowSudoModal(false); // Fix: Close modal immediately
@@ -145,13 +153,13 @@ const StartNodeComponent = ({ id, data, selected }: NodeProps<StartNodeData>) =>
                     className={`
                         group rounded-full w-10 h-10 flex justify-center items-center 
                         border shadow-sm shrink-0 cursor-pointer transition-all duration-300
-                        ${isStarting
+                        ${isWorkflowRunning
                             ? 'bg-red-50 border-red-100 hover:bg-red-500' // Red for cancel
                             : 'bg-blue-50 border-blue-100 hover:bg-blue-500' // Blue for run
                         }
                     `}
                 >
-                    {isStarting ? (
+                    {isWorkflowRunning ? (
                         <Square
                             size={16}
                             className="text-red-500 fill-red-500/20 group-hover:text-white group-hover:fill-white"

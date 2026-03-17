@@ -1,0 +1,118 @@
+<mxfile host="65bd71144e">
+    <diagram id="workflow_init_flow" name="Workflow Start Flow">
+        <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0" />
+                <mxCell id="1" parent="0" />
+
+                <!-- Lifelines -->
+                <mxCell id="ll_ui" value="User Interface&lt;br&gt;(React)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="40" width="100" height="880" as="geometry" />
+                </mxCell>
+                <mxCell id="ll_store" value="Zustand Store&lt;br&gt;(State Hub)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+                    <mxGeometry x="200" y="40" width="100" height="880" as="geometry" />
+                </mxCell>
+                <mxCell id="ll_api" value="FastAPI Gateway&lt;br&gt;(Main Orchestrator)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+                    <mxGeometry x="400" y="40" width="100" height="880" as="geometry" />
+                </mxCell>
+                <mxCell id="ll_eng" value="Async Engine&lt;br&gt;(Execution Loop)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+                    <mxGeometry x="600" y="40" width="100" height="880" as="geometry" />
+                </mxCell>
+                <mxCell id="ll_ws" value="WebSocket&lt;br&gt;(Real-time Feed)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+                    <mxGeometry x="760" y="40" width="100" height="880" as="geometry" />
+                </mxCell>
+
+                <!-- Interactions -->
+                <mxCell id="step1" value="Click &quot;Start&quot;" style="html=1;verticalAlign=bottom;endArrow=block;entryX=0;entryY=0.1;strokeWidth=2;" edge="1" parent="1" source="ll_ui" target="ll_store">
+                    <mxGeometry x="40" y="128" as="geometry">
+                        <mxPoint x="90" y="128" as="sourcePoint" />
+                        <mxPoint x="200" y="128" as="targetPoint" />
+                    </mxGeometry>
+                </mxCell>
+
+                <mxCell id="step2" value="validateSudoLocks()" style="edgeStyle=orthogonalEdgeStyle;html=1;align=left;spacingLeft=2;endArrow=block;rounded=0;entryX=1;entryY=0.15;" edge="1" parent="1" source="ll_store" target="ll_store">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="255" y="150" as="sourcePoint" />
+                        <Array as="points">
+                            <mxPoint x="280" y="150" />
+                            <mxPoint x="280" y="180" />
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+
+                <mxCell id="step3" value="resetUIState()" style="edgeStyle=orthogonalEdgeStyle;html=1;align=left;spacingLeft=2;endArrow=block;rounded=0;entryX=1;entryY=0.22;" edge="1" parent="1" source="ll_store" target="ll_store">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="255" y="210" as="sourcePoint" />
+                        <Array as="points">
+                            <mxPoint x="280" y="210" />
+                            <mxPoint x="280" y="240" />
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+
+                <mxCell id="step4" value="POST /execute" style="html=1;verticalAlign=bottom;endArrow=block;entryX=0;entryY=0.3;" edge="1" parent="1" source="ll_store" target="ll_api">
+                    <mxGeometry x="250" y="300" as="geometry" />
+                </mxCell>
+
+                <mxCell id="step5" value="validate_workflow()" style="edgeStyle=orthogonalEdgeStyle;html=1;align=left;spacingLeft=2;endArrow=block;rounded=0;entryX=1;entryY=0.35;" edge="1" parent="1" source="ll_api" target="ll_api">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="455" y="320" as="sourcePoint" />
+                        <Array as="points">
+                            <mxPoint x="480" y="320" />
+                            <mxPoint x="480" y="350" />
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+
+                <mxCell id="step6" value="Init AsyncGraphExecutor" style="html=1;verticalAlign=bottom;endArrow=block;entryX=0;entryY=0.42;" edge="1" parent="1" source="ll_api" target="ll_eng">
+                    <mxGeometry x="450" y="410" as="geometry" />
+                </mxCell>
+
+                <mxCell id="step7" value="Find StartNodes" style="edgeStyle=orthogonalEdgeStyle;html=1;align=left;spacingLeft=2;endArrow=block;rounded=0;entryX=1;entryY=0.48;" edge="1" parent="1" source="ll_eng" target="ll_eng">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="655" y="440" as="sourcePoint" />
+                        <Array as="points">
+                            <mxPoint x="680" y="440" />
+                            <mxPoint x="680" y="470" />
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+
+                <mxCell id="step8" value="Emit: node_status (running)" style="html=1;verticalAlign=bottom;endArrow=block;entryX=0;entryY=0.55;" edge="1" parent="1" source="ll_eng" target="ll_ws">
+                    <mxGeometry x="650" y="520" as="geometry" />
+                </mxCell>
+
+                <mxCell id="step9" value="Broadcast to Frontend" style="html=1;verticalAlign=bottom;endArrow=block;entryX=1;entryY=0.6;" edge="1" parent="1" source="ll_ws" target="ll_store">
+                    <mxGeometry x="810" y="570" as="geometry" />
+                </mxCell>
+
+                <mxCell id="step10" value="Update Node Borders (Yellow)" style="html=1;verticalAlign=bottom;endArrow=block;entryX=1;entryY=0.65;" edge="1" parent="1" source="ll_store" target="ll_ui">
+                    <mxGeometry x="250" y="610" as="geometry" />
+                </mxCell>
+
+                <mxCell id="step11" value="asyncio.create_task(execute_plugin)" style="edgeStyle=orthogonalEdgeStyle;html=1;align=left;spacingLeft=2;endArrow=block;rounded=0;entryX=1;entryY=0.75;" edge="1" parent="1" source="ll_eng" target="ll_eng">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="655" y="680" as="sourcePoint" />
+                        <Array as="points">
+                            <mxPoint x="680" y="680" />
+                            <mxPoint x="680" y="710" />
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+
+                <mxCell id="step12" value="Plugin Executes (PTY Spawn)" style="html=1;verticalAlign=bottom;endArrow=block;entryX=1;entryY=0.82;dashed=1;" edge="1" parent="1" source="ll_eng" target="ll_ui">
+                    <mxGeometry x="650" y="760" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="360" y="760" />
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+
+                <mxCell id="step13" value="Await API Response (Thread ID)" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;exitX=0;exitY=0.9;" edge="1" parent="1" source="ll_api" target="ll_store">
+                    <mxGeometry x="450" y="830" as="geometry" />
+                </mxCell>
+
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

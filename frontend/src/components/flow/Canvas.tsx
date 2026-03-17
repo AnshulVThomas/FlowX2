@@ -97,6 +97,10 @@ export function Canvas() {
                 };
             } else if (type === 'vaultNode') {
                 data = { sudoPassword: '' };
+            } else if (type === 'shellTool') {
+                data = { capability_profile: 'read_only' };
+            } else if (type === 'writeFileTool') {
+                data = {};
             }
 
             const newNode = {

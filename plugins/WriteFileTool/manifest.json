@@ -1,0 +1,15 @@
+{
+    "id": "writeFileTool",
+    "name": "Write File",
+    "category": "Tools",
+    "description": "Grants the agent native Python file-write access under /workspace.",
+    "color": "#10b981",
+    "backend_class": "WriteFileToolNode",
+    "frontend_component": "WriteFileToolUI",
+    "constraints": {
+        "allowed_target_types": [
+            "reactAgent",
+            "reactAgentV2"
+        ]
+    }
+}
