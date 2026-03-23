@@ -196,10 +196,21 @@ class AsyncGraphExecutor:
         """Executes the plugin with the filtered inputs."""
         node_id = node["id"]
         node_data = node.get("data", {})
+        # 1. SKIP LOGIC
+        # Read Wait Strategy from Plugin Class
+        node_class = NodeRegistry.get_node(node["type"])
+        instance = node_class(node_data.copy())
+        strategy = instance.get_wait_strategy()
         
-        # 1. Check for total skip (All inputs are SKIP_BRANCH)
-        # Note: If inputs is empty (start node), we treat it as valid run.
-        if inputs and all(v is SKIP_BRANCH for v in inputs.values()):
+        # Check for skips
+        should_skip = False
+        if inputs:
+            if strategy == "ALL" and any(v is SKIP_BRANCH for v in inputs.values()):
+                should_skip = True
+            elif strategy == "ANY" and all(v is SKIP_BRANCH for v in inputs.values()):
+                should_skip = True
+                
+        if should_skip:
             self.node_status[node_id] = "skipped"
             if self.emit_event:
                 await self.emit_event("node_status", {"nodeId": node_id, "status": "skipped"})

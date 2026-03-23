@@ -13,7 +13,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "backend"))
 sys.modules["database.connection"] = MagicMock()
 sys.modules["database.connection"].db = MagicMock()
 
-from backend.engine.async_runner import AsyncGraphExecutor
+from backend.engine.async_runner import AsyncGraphExecutor, SKIP_BRANCH
 from backend.engine.registry import NodeRegistry
 from plugins.CommandNode.backend.node import CommandNode
 from plugins.ORMergeNode.backend.node import ORMergeNode
@@ -101,6 +101,44 @@ async def test_push_engine():
     # Check AsyncGraphExecutor inboxes state would require accessing internal state
     
     print(f"✅ OR Merge picked correct winner: {merge_res['_merged_from']}")
+    
+    # -------------------------------------------------------------
+    # NEW TEST: multi-parent AND-join (ReActAgent bug scenario)
+    # -------------------------------------------------------------
+    print("\n--- Testing AND-join multi-parent skip (Bugged Scenario) ---")
+    # Command1 (success) --[failure only]--> Agent
+    # ToolNode (success) ------------------> Agent
+    
+    workflow_data_bug = {
+        "id": "test-workflow-2",
+        "nodes": [
+            {"id": "start", "type": "startNode", "data": {}},
+            {"id": "cmd1", "type": "commandNode", "data": {"command": "echo 'winner'"}},
+            {"id": "tool1", "type": "startNode", "data": {}}, # Mocking a tool node as start node
+            {"id": "agent", "type": "commandNode", "data": {"command": "echo 'should not run'"}}, # agent is AND-join
+        ],
+        "edges": [
+            {"source": "start", "target": "cmd1", "data": {"behavior": "conditional"}},
+            {"source": "cmd1", "target": "agent", "data": {"behavior": "failure"}},
+            {"source": "tool1", "target": "agent", "data": {"behavior": "conditional"}}
+        ]
+    }
+    
+    executor2 = AsyncGraphExecutor(workflow_data_bug)
+    executor2.emit_event = AsyncMock()
+    await executor2.execute()
+    
+    print("Execution Results:", executor2.results)
+    print("Node Statuses:", executor2.node_status)
+    agent_status = executor2.node_status.get("agent")
+    
+    assert executor2.node_status["cmd1"] == "completed", "cmd1 should complete"
+    assert executor2.node_status["tool1"] == "completed", "tool1 should complete"
+    
+    # The bug was that the agent executed (status='completed') instead of 'skipped'
+    assert agent_status == "skipped", f"Agent should be skipped, got {agent_status}"
+    assert "agent" not in executor2.results or executor2.results["agent"] is SKIP_BRANCH, "Agent should not have a result payload"
+    print("✅ AND-join correctly skipped despite multi-parent mix of SKIP/SUCCESS!")
     
     print("\n--- All Tests Passed ---")
 
